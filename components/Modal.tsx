@@ -7,11 +7,13 @@ export default function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
 }) {
   if (!open) return null;
 
@@ -21,7 +23,7 @@ export default function Modal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border-2 border-cyan-400/50 bg-zinc-950 p-6 shadow-[0_0_50px_rgba(34,211,238,0.25)]"
+        className={`w-full ${wide ? "max-w-3xl" : "max-w-md"} max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-cyan-400/50 bg-zinc-950 p-6 shadow-[0_0_50px_rgba(34,211,238,0.25)]`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">

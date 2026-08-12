@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import Modal from "@/components/Modal";
 
 type NcrRecord = {
   id: string;
@@ -57,8 +58,9 @@ export default function NcrPage() {
   const [deptName, setDeptName] = useState<string | null>(null);
   const [records, setRecords] = useState<NcrRecord[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [form, setForm] = useState<Record<string, string>>(emptyForm());
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +93,14 @@ export default function NcrPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function startEdit(record: NcrRecord) {
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm());
+    setError(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(record: NcrRecord) {
     setEditingId(record.id);
     setError(null);
     setForm(
@@ -104,11 +113,12 @@ export default function NcrPage() {
         ]),
       ),
     );
+    setModalOpen(true);
   }
 
-  function resetForm() {
+  function closeModal() {
+    setModalOpen(false);
     setEditingId(null);
-    setForm(emptyForm());
     setError(null);
   }
 
@@ -147,7 +157,7 @@ export default function NcrPage() {
       return;
     }
 
-    resetForm();
+    closeModal();
     load();
   }
 
@@ -166,7 +176,7 @@ export default function NcrPage() {
   }
 
   const inputClass =
-    "w-full min-w-36 rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60";
+    "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60";
 
   return (
     <div className="min-h-full bg-[#050507] font-sans">
@@ -185,26 +195,28 @@ export default function NcrPage() {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-6 py-10">
-        <div className="mb-8">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <button
+              onClick={() => router.push(`/branches/${params.id}`)}
+              className="mb-2 text-sm text-zinc-500 transition-colors hover:text-cyan-300"
+            >
+              &larr; Back to Departments
+            </button>
+            <h2 className="neon-text-violet text-xl font-semibold">
+              {dataLoading ? "..." : deptName ?? "Department"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Non-Conformance Report (NCR) records
+            </p>
+          </div>
           <button
-            onClick={() => router.push(`/branches/${params.id}`)}
-            className="mb-2 text-sm text-zinc-500 transition-colors hover:text-cyan-300"
+            onClick={openCreate}
+            className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
           >
-            &larr; Back to Departments
+            + Create NCR
           </button>
-          <h2 className="neon-text-violet text-xl font-semibold">
-            {dataLoading ? "..." : deptName ?? "Department"}
-          </h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Non-Conformance Report (NCR) records
-          </p>
         </div>
-
-        {error && (
-          <p className="mb-4 rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-400">
-            {error}
-          </p>
-        )}
 
         <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60">
           <table className="w-full min-w-max border-collapse text-left text-sm">
@@ -239,7 +251,7 @@ export default function NcrPage() {
                     colSpan={FIELDS.length + 1}
                     className="px-3 py-8 text-center text-zinc-500"
                   >
-                    No NCR records yet. Use the row below to add one.
+                    No NCR records yet. Click &quot;Create NCR&quot; to add one.
                   </td>
                 </tr>
               ) : (
@@ -249,7 +261,10 @@ export default function NcrPage() {
                     className="border-b border-zinc-800/60 transition-colors hover:bg-zinc-900/40"
                   >
                     {FIELDS.map((f) => (
-                      <td key={f.key} className="whitespace-nowrap px-3 py-2 text-zinc-300">
+                      <td
+                        key={f.key}
+                        className="whitespace-nowrap px-3 py-2 text-zinc-300"
+                      >
                         {record[f.key as keyof NcrRecord] == null
                           ? ""
                           : String(record[f.key as keyof NcrRecord])}
@@ -257,7 +272,7 @@ export default function NcrPage() {
                     ))}
                     <td className="whitespace-nowrap px-3 py-2 text-right">
                       <button
-                        onClick={() => startEdit(record)}
+                        onClick={() => openEdit(record)}
                         className="mr-2 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
                       >
                         Edit
@@ -274,44 +289,46 @@ export default function NcrPage() {
               )}
             </tbody>
           </table>
+        </div>
+      </main>
 
-          <form
-            onSubmit={handleSave}
-            className="border-t-2 border-cyan-400/40 bg-zinc-900/40"
-          >
-            <div className="flex items-center gap-3 p-3">
-              {FIELDS.map((f) => (
+      <Modal
+        open={modalOpen}
+        title={editingId ? "Edit NCR" : "Create NCR"}
+        onClose={closeModal}
+        wide
+      >
+        <form onSubmit={handleSave} className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {FIELDS.map((f) => (
+              <label
+                key={f.key}
+                className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300"
+              >
+                {f.label}
                 <input
-                  key={f.key}
                   type={f.type === "number" ? "number" : "text"}
                   value={form[f.key]}
                   onChange={(e) => setField(f.key, e.target.value)}
-                  placeholder={f.label}
                   className={inputClass}
                 />
-              ))}
-              <div className="flex flex-col gap-1 self-end">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg border-2 border-cyan-400/60 px-4 py-1.5 text-sm font-medium text-cyan-300 transition-all duration-300 hover:bg-cyan-400/10 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : editingId ? "Save Changes" : "Add"}
-                </button>
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-lg border border-zinc-700 px-4 py-1.5 text-xs text-zinc-300 transition-colors hover:text-zinc-50"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </div>
-          </form>
-        </div>
-      </main>
+              </label>
+            ))}
+          </div>
+          {error && (
+            <p className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-400">
+              {error}
+            </p>
+          )}
+          <button
+            type="submit"
+            disabled={saving}
+            className="mt-2 rounded-lg bg-cyan-400/20 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-300 hover:bg-cyan-400/30 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : editingId ? "Save Changes" : "Create NCR"}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }
