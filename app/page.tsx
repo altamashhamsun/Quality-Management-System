@@ -25,7 +25,7 @@ export default function SignIn() {
       return;
     }
 
-    router.push("/welcome");
+    router.push("/branches");
   }
 
   return (
