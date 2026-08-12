@@ -66,7 +66,12 @@ export function exportNcrToXlsx(records: NcrRecord[]) {
   XLSX.writeFile(workbook, "ncrs.xlsx");
 }
 
-const DATE_KEYS = new Set(["branch_manager", "ceo"]);
+const DATE_KEYS = new Set([
+  "opening_ncs",
+  "closing_ncs",
+  "branch_manager",
+  "ceo",
+]);
 
 export function formatExcelDate(value: unknown): string {
   if (value == null || value === "") return "";
