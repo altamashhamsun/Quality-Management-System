@@ -250,13 +250,8 @@ export default function NcrPage() {
           </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <StatsTile label="Total NCRs" value={records.length} color="cyan" />
-          <StatsTile
-            label="Total NCs"
-            value={records.reduce((sum, r) => sum + (r.opening_ncs ?? 0), 0)}
-            color="violet"
-          />
           <StatsTile
             label="Action Taken"
             value={records.filter((r) => r.status === "Action Taken").length}
