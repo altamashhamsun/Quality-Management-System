@@ -187,33 +187,33 @@ export default function NcrPage() {
 
   return (
     <div className="min-h-full bg-[#050507] font-sans">
-      <header className="flex items-center justify-between border-b border-zinc-800/80 px-6 py-4">
-        <h1 className="neon-text-cyan text-2xl font-bold tracking-tight">
+      <header className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-2">
+        <h1 className="neon-text-cyan text-lg font-bold tracking-tight">
           Compliance IOS
         </h1>
         <button
           onClick={() =>
             supabase.auth.signOut().then(() => router.replace("/"))
           }
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-pink-500/60 hover:text-pink-400"
+          className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition-colors hover:border-pink-500/60 hover:text-pink-400"
         >
           Sign Out
         </button>
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-6 py-10">
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <main className="mx-auto max-w-full px-4 py-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <button
               onClick={() => router.push(`/branches/${params.id}`)}
-              className="mb-2 text-sm text-zinc-500 transition-colors hover:text-cyan-300"
+              className="mb-1 text-xs text-zinc-500 transition-colors hover:text-cyan-300"
             >
               &larr; Back to Departments
             </button>
-            <h2 className="neon-text-violet text-xl font-semibold">
+            <h2 className="neon-text-violet text-lg font-semibold">
               {dataLoading ? "..." : deptName ?? "Department"}
             </h2>
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="text-xs text-zinc-500">
               Non-Conformance Report (NCR) records
             </p>
           </div>
