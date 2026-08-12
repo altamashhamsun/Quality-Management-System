@@ -167,6 +167,9 @@ export default function DepartmentsPage() {
                 name={dept.name}
                 subtitle={`Department · ${new Date(dept.created_at).toLocaleDateString()}`}
                 color={(["pink", "violet", "cyan"] as const)[i % 3]}
+                onClick={() =>
+                  router.push(`/branches/${params.id}/departments/${dept.id}`)
+                }
                 actions={
                   <>
                     <button
