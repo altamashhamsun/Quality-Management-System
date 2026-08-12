@@ -249,18 +249,24 @@ export default function NcrPage() {
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60">
-          <table className="w-full min-w-max border-collapse text-left text-sm">
+          <table className="w-full table-fixed border-collapse text-left text-xs">
+            <colgroup>
+              {FIELDS.map((f) => (
+                <col key={f.key} />
+              ))}
+              <col className="w-28" />
+            </colgroup>
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-900/60">
                 {FIELDS.map((f) => (
                   <th
                     key={f.key}
-                    className="whitespace-nowrap px-3 py-3 text-xs font-semibold uppercase tracking-wide text-cyan-300"
+                    className="break-words px-1.5 py-2 align-top text-[10px] font-semibold uppercase tracking-wide text-cyan-300"
                   >
                     {f.label}
                   </th>
                 ))}
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-cyan-300">
+                <th className="px-1.5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
                   Actions
                 </th>
               </tr>
@@ -293,14 +299,14 @@ export default function NcrPage() {
                     {FIELDS.map((f) => (
                       <td
                         key={f.key}
-                        className="whitespace-nowrap px-3 py-2 text-zinc-300"
+                        className="break-words px-1.5 py-2 align-top text-zinc-300"
                       >
                         {record[f.key as keyof NcrRecord] == null
                           ? ""
                           : String(record[f.key as keyof NcrRecord])}
                       </td>
                     ))}
-                    <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <td className="whitespace-nowrap px-1.5 py-2 text-right">
                       <button
                         onClick={() => openEdit(record)}
                         className="mr-2 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
