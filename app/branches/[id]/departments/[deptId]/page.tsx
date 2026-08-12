@@ -1,49 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Modal from "@/components/Modal";
-
-type NcrRecord = {
-  id: string;
-  ncr_number: string | null;
-  description: string | null;
-  branch: string | null;
-  clause: string | null;
-  opening_ncs: number | null;
-  closing_ncs: number | null;
-  recommendations: string | null;
-  status: string | null;
-  hod_name: string | null;
-  hod_comments: string | null;
-  branch_manager: string | null;
-  branch_manager_comments: string | null;
-  hr: string | null;
-  hr_comments: string | null;
-  ceo: string | null;
-  ceo_comments: string | null;
-};
-
-const FIELDS: { key: string; label: string; type?: "number" }[] = [
-  { key: "ncr_number", label: "NCR #" },
-  { key: "description", label: "Description" },
-  { key: "branch", label: "Branch" },
-  { key: "clause", label: "Clause" },
-  { key: "opening_ncs", label: "Opening NCs", type: "number" },
-  { key: "closing_ncs", label: "Closing NCs", type: "number" },
-  { key: "recommendations", label: "Recommendations" },
-  { key: "status", label: "Status" },
-  { key: "hod_name", label: "Head of Department/Manager/Supervisor" },
-  { key: "hod_comments", label: "Comments from Head of Department/Manager/Supervisor" },
-  { key: "branch_manager", label: "Branch Manager" },
-  { key: "branch_manager_comments", label: "Comments from Branch Manager" },
-  { key: "hr", label: "HR" },
-  { key: "hr_comments", label: "Comments from HR" },
-  { key: "ceo", label: "CEO" },
-  { key: "ceo_comments", label: "Comments from CEO" },
-];
+import {
+  FIELDS,
+  NcrRecord,
+  exportNcrToXlsx,
+  parseNcrFile,
+} from "@/lib/ncr";
 
 const NUMBER_FIELDS = new Set(["opening_ncs", "closing_ncs"]);
 
@@ -63,6 +30,8 @@ export default function NcrPage() {
   const [form, setForm] = useState<Record<string, string>>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     const deptResult = await supabase
@@ -175,6 +144,44 @@ export default function NcrPage() {
     load();
   }
 
+  function handleExport() {
+    exportNcrToXlsx(records);
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      const rows = await parseNcrFile(file);
+      if (rows.length === 0) {
+        setError("No rows found in the selected file.");
+        return;
+      }
+
+      const { error } = await supabase.from("ncr_records").insert(
+        rows.map((row) => ({ department_id: params.deptId, ...row })),
+      );
+
+      if (error) {
+        setError(error.message);
+        return;
+      }
+
+      await load();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to import the file.",
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const inputClass =
     "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60";
 
@@ -210,12 +217,35 @@ export default function NcrPage() {
               Non-Conformance Report (NCR) records
             </p>
           </div>
-          <button
-            onClick={openCreate}
-            className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
-          >
-            + Create NCR
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExport}
+              disabled={records.length === 0}
+              className="rounded-lg border-2 border-pink-500/60 px-4 py-2 text-sm font-medium text-pink-400 shadow-[0_0_15px_rgba(244,114,182,0.2)] transition-all duration-300 hover:bg-pink-500/10 hover:shadow-[0_0_25px_rgba(244,114,182,0.4)] disabled:opacity-40"
+            >
+              Export XLSX
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="rounded-lg border-2 border-violet-500/60 px-4 py-2 text-sm font-medium text-violet-400 shadow-[0_0_15px_rgba(167,139,250,0.2)] transition-all duration-300 hover:bg-violet-500/10 hover:shadow-[0_0_25px_rgba(167,139,250,0.4)] disabled:opacity-40"
+            >
+              {importing ? "Importing..." : "Import XLSX"}
+            </button>
+            <button
+              onClick={openCreate}
+              className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
+            >
+              + Create NCR
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+          </div>
         </div>
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60">
