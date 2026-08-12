@@ -34,6 +34,7 @@ export default function NcrPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [search, setSearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -188,6 +189,18 @@ export default function NcrPage() {
   const inputClass =
     "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60";
 
+  const query = search.trim().toLowerCase();
+  const filteredRecords = query
+    ? records.filter((record) =>
+        Object.entries(record).some(([key, value]) => {
+          if (key === "id" || key === "department_id" || value == null) {
+            return false;
+          }
+          return String(value).toLowerCase().includes(query);
+        }),
+      )
+    : records;
+
   return (
     <div className="min-h-full bg-[#050507] font-sans">
       <header className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-2">
@@ -251,6 +264,14 @@ export default function NcrPage() {
           </div>
         </div>
 
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search issues..."
+          className="mb-4 w-full rounded-lg border border-cyan-400/40 bg-zinc-950 px-4 py-2 text-sm text-zinc-50 shadow-[0_0_15px_rgba(34,211,238,0.1)] outline-none transition-all duration-300 placeholder:text-zinc-600 focus:border-cyan-400/80 focus:shadow-[0_0_25px_rgba(34,211,238,0.2)]"
+        />
+
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <StatsTile label="Total NCRs" value={records.length} color="cyan" />
           <StatsTile
@@ -312,8 +333,17 @@ export default function NcrPage() {
                     No NCR records yet. Click &quot;Create NCR&quot; to add one.
                   </td>
                 </tr>
+              ) : filteredRecords.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={FIELDS.length + 1}
+                    className="px-3 py-8 text-center text-zinc-500"
+                  >
+                    No records match &quot;{search}&quot;.
+                  </td>
+                </tr>
               ) : (
-                records.map((record) => (
+                filteredRecords.map((record) => (
                   <tr
                     key={record.id}
                     className="border-b border-zinc-800/60 transition-colors hover:bg-zinc-900/40"
