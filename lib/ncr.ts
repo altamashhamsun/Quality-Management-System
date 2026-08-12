@@ -29,12 +29,8 @@ export const FIELDS: { key: string; label: string; type?: "number" }[] = [
   { key: "closing_ncs", label: "Closing NCs", type: "number" },
   { key: "recommendations", label: "Recommendations" },
   { key: "status", label: "Status" },
-  { key: "hod_name", label: "Head of Department/Manager/Supervisor" },
-  { key: "hod_comments", label: "Comments from Head of Department/Manager/Supervisor" },
   { key: "branch_manager", label: "Branch Manager" },
   { key: "branch_manager_comments", label: "Comments from Branch Manager" },
-  { key: "hr", label: "HR" },
-  { key: "hr_comments", label: "Comments from HR" },
   { key: "ceo", label: "CEO" },
   { key: "ceo_comments", label: "Comments from CEO" },
 ];
@@ -48,12 +44,8 @@ const HEADER_MAP: Record<string, string> = {
   "closing ncs": "closing_ncs",
   recommendations: "recommendations",
   status: "status",
-  "head of department/manager/supervisor": "hod_name",
-  "comments from head of department/manager/supervisor": "hod_comments",
   "branch manager": "branch_manager",
   "comments from branch manager": "branch_manager_comments",
-  hr: "hr",
-  "comments from hr": "hr_comments",
   ceo: "ceo",
   "comments from ceo": "ceo_comments",
 };
@@ -68,11 +60,31 @@ export function exportNcrToXlsx(records: NcrRecord[]) {
     }
     return row;
   });
-
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "NCRs");
   XLSX.writeFile(workbook, "ncrs.xlsx");
+}
+
+const DATE_KEYS = new Set(["branch_manager", "ceo"]);
+
+export function formatExcelDate(value: unknown): string {
+  if (value == null || value === "") return "";
+  const num = Number(value);
+  if (Number.isNaN(num)) return String(value);
+  const date = new Date((num - 25569) * 86400000);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatDisplayValue(key: string, value: unknown): string {
+  if (value == null || value === "") return "";
+  if (DATE_KEYS.has(key)) return formatExcelDate(value);
+  return String(value);
 }
 
 export async function parseNcrFile(file: File): Promise<Partial<NcrRecord>[]> {

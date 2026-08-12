@@ -11,6 +11,7 @@ import {
   FIELDS,
   NcrRecord,
   exportNcrToXlsx,
+  formatDisplayValue,
   parseNcrFile,
 } from "@/lib/ncr";
 
@@ -329,7 +330,10 @@ export default function NcrPage() {
                         ) : record[f.key as keyof NcrRecord] == null ? (
                           ""
                         ) : (
-                          String(record[f.key as keyof NcrRecord])
+                          formatDisplayValue(
+                            f.key,
+                            record[f.key as keyof NcrRecord],
+                          )
                         )}
                       </td>
                     ))}
