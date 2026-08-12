@@ -4,10 +4,10 @@ export default function SignIn() {
       <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-            Sign In
+            Compliance IOS
           </h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-            Welcome back! Please sign in to your account.
+            Sign in to continue
           </p>
         </div>
         <form className="flex flex-col gap-4">
