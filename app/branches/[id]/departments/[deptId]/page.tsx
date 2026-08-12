@@ -281,18 +281,14 @@ export default function NcrPage() {
           >
             <div className="flex items-center gap-3 p-3">
               {FIELDS.map((f) => (
-                <div key={f.key} className="flex flex-col gap-1">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-                    {f.label}
-                  </span>
-                  <input
-                    type={f.type === "number" ? "number" : "text"}
-                    value={form[f.key]}
-                    onChange={(e) => setField(f.key, e.target.value)}
-                    placeholder={f.label}
-                    className={inputClass}
-                  />
-                </div>
+                <input
+                  key={f.key}
+                  type={f.type === "number" ? "number" : "text"}
+                  value={form[f.key]}
+                  onChange={(e) => setField(f.key, e.target.value)}
+                  placeholder={f.label}
+                  className={inputClass}
+                />
               ))}
               <div className="flex flex-col gap-1 self-end">
                 <button
