@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sign In",
-  description: "Sign in to your account",
+  title: "Compliance IOS",
+  description: "Compliance IOS",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
