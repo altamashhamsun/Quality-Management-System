@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Modal from "@/components/Modal";
+import StatsTile from "@/components/StatsTile";
+import StatusBadge from "@/components/StatusBadge";
 import {
   FIELDS,
   NcrRecord,
@@ -248,6 +250,30 @@ export default function NcrPage() {
           </div>
         </div>
 
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <StatsTile label="Total NCRs" value={records.length} color="cyan" />
+          <StatsTile
+            label="Total NCs"
+            value={records.reduce((sum, r) => sum + (r.opening_ncs ?? 0), 0)}
+            color="violet"
+          />
+          <StatsTile
+            label="Action Taken"
+            value={records.filter((r) => r.status === "Action Taken").length}
+            color="amber"
+          />
+          <StatsTile
+            label="Action Not Taken Yet"
+            value={records.filter((r) => r.status === "Action Not Taken Yet").length}
+            color="red"
+          />
+          <StatsTile
+            label="Done"
+            value={records.filter((r) => r.status === "Done").length}
+            color="green"
+          />
+        </div>
+
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60">
           <table className="w-full table-fixed border-collapse text-left text-xs">
             <colgroup>
@@ -301,9 +327,15 @@ export default function NcrPage() {
                         key={f.key}
                         className="break-words px-1.5 py-2 align-top text-zinc-300"
                       >
-                        {record[f.key as keyof NcrRecord] == null
-                          ? ""
-                          : String(record[f.key as keyof NcrRecord])}
+                        {f.key === "status" ? (
+                          <StatusBadge
+                            status={record.status}
+                          />
+                        ) : record[f.key as keyof NcrRecord] == null ? (
+                          ""
+                        ) : (
+                          String(record[f.key as keyof NcrRecord])
+                        )}
                       </td>
                     ))}
                     <td className="whitespace-nowrap px-1.5 py-2 text-right">

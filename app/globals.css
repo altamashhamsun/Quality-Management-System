@@ -46,3 +46,18 @@ body::-webkit-scrollbar {
   color: #a78bfa;
   text-shadow: 0 0 8px rgba(167, 139, 250, 0.9), 0 0 20px rgba(167, 139, 250, 0.5);
 }
+
+.neon-text-amber {
+  color: #fbbf24;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.9), 0 0 20px rgba(251, 191, 36, 0.5);
+}
+
+.neon-text-red {
+  color: #f87171;
+  text-shadow: 0 0 8px rgba(248, 113, 113, 0.9), 0 0 20px rgba(248, 113, 113, 0.5);
+}
+
+.neon-text-green {
+  color: #34d399;
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.9), 0 0 20px rgba(52, 211, 153, 0.5);
+}
