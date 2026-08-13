@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { label: "Branches", path: "/branches" },
   { label: "Calendar", path: "/calendar" },
   { label: "Audit", path: "/audit" },
+  { label: "Performances", path: "/performances" },
 ] as const;
 
 export default function Header({ email }: { email?: string | null }) {
