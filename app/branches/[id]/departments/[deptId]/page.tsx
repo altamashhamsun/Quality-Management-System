@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Modal from "@/components/Modal";
+import Header from "@/components/Header";
 import StatsTile from "@/components/StatsTile";
 import StatusBadge from "@/components/StatusBadge";
 import {
@@ -203,19 +204,7 @@ export default function NcrPage() {
 
   return (
     <div className="min-h-full bg-[#050507] font-sans">
-      <header className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-2">
-        <h1 className="neon-text-cyan text-lg font-bold tracking-tight">
-          Compliance IOS
-        </h1>
-        <button
-          onClick={() =>
-            supabase.auth.signOut().then(() => router.replace("/"))
-          }
-          className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-300 transition-colors hover:border-pink-500/60 hover:text-pink-400"
-        >
-          Sign Out
-        </button>
-      </header>
+      <Header />
 
       <main className="mx-auto max-w-full px-4 py-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

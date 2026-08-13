@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import NeonTile from "@/components/NeonTile";
 import Modal from "@/components/Modal";
+import Header from "@/components/Header";
 
 type Department = { id: string; name: string; created_at: string };
 
@@ -117,17 +118,7 @@ export default function DepartmentsPage() {
 
   return (
     <div className="min-h-full bg-[#050507] font-sans">
-      <header className="flex items-center justify-between border-b border-zinc-800/80 px-6 py-4">
-        <h1 className="neon-text-cyan text-2xl font-bold tracking-tight">
-          Compliance IOS
-        </h1>
-        <button
-          onClick={() => supabase.auth.signOut().then(() => router.replace("/"))}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-pink-500/60 hover:text-pink-400"
-        >
-          Sign Out
-        </button>
-      </header>
+      <Header />
 
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
