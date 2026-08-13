@@ -19,7 +19,7 @@ export default function Welcome() {
 
   return (
     <div className="flex flex-1 items-center justify-center bg-[#050507] font-sans">
-      <p className="neon-text-cyan text-sm">Loading...</p>
+      <p className="text-sm text-zinc-400">Loading...</p>
     </div>
   );
 }

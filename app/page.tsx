@@ -67,7 +67,7 @@ export default function SignIn() {
             />
           </label>
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/50 dark:text-red-400">
+            <p className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
               {error}
             </p>
           )}

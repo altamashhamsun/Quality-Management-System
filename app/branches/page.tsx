@@ -97,7 +97,7 @@ export default function BranchesPage() {
   }
 
   const actionBtn =
-    "rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300";
+    "rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white";
 
   return (
     <div className="min-h-full bg-[#050507] font-sans">
@@ -106,14 +106,14 @@ export default function BranchesPage() {
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="neon-text-violet text-xl font-semibold">Branches</h2>
+            <h2 className="text-xl font-semibold text-zinc-50">Branches</h2>
             <p className="mt-1 text-sm text-zinc-500">
               Manage your compliance branches and their departments
             </p>
           </div>
           <button
             onClick={openCreate}
-            className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
+            className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800"
           >
             + Create Branch
           </button>
@@ -127,12 +127,11 @@ export default function BranchesPage() {
           </p>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {branches.map((branch, i) => (
+            {branches.map((branch) => (
               <NeonTile
                 key={branch.id}
                 name={branch.name}
                 subtitle={`Branch · ${new Date(branch.created_at).toLocaleDateString()}`}
-                color={(["cyan", "pink", "violet"] as const)[i % 3]}
                 onClick={() => router.push(`/branches/${branch.id}`)}
                 actions={
                   <>
@@ -144,7 +143,7 @@ export default function BranchesPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(branch)}
-                      className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+                      className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                     >
                       Delete
                     </button>
@@ -171,18 +170,18 @@ export default function BranchesPage() {
               placeholder="e.g. Downtown Branch"
               autoFocus
               required
-              className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60"
+              className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-300"
             />
           </label>
           {error && (
-            <p className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-400">
+            <p className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">
               {error}
             </p>
           )}
           <button
             type="submit"
             disabled={saving}
-            className="mt-2 rounded-lg bg-cyan-400/20 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-300 hover:bg-cyan-400/30 disabled:opacity-50"
+            className="mt-2 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition-all duration-300 hover:bg-zinc-700 disabled:opacity-50"
           >
             {saving ? "Saving..." : editing ? "Save Changes" : "Create"}
           </button>

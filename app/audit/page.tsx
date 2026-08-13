@@ -15,9 +15,9 @@ type AuditDocument = {
 };
 
 const TABS = [
-  { key: "plan", label: "Audit Plans", activeClass: "border-cyan-400/60 bg-cyan-400/10 text-cyan-300" },
-  { key: "report", label: "Audit Reports", activeClass: "border-pink-400/60 bg-pink-400/10 text-pink-300" },
-  { key: "capa", label: "Corrective & Preventive Action", activeClass: "border-violet-400/60 bg-violet-400/10 text-violet-300" },
+  { key: "plan", label: "Audit Plans", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
+  { key: "report", label: "Audit Reports", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
+  { key: "capa", label: "Corrective & Preventive Action", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -122,14 +122,14 @@ export default function AuditPage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="neon-text-violet text-xl font-semibold">Audit</h2>
+            <h2 className="text-xl font-semibold text-zinc-50">Audit</h2>
             <p className="mt-1 text-sm text-zinc-500">
               Manage audit plans, audit reports, and corrective & preventive actions
             </p>
           </div>
           <button
             onClick={openCreate}
-            className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
+            className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800"
           >
             + Add {TABS.find((t) => t.key === activeTab)?.label.replace(/s$/, "")}
           </button>
@@ -145,7 +145,7 @@ export default function AuditPage() {
                 onClick={() => setActiveTab(tab.key)}
                 className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all duration-300 ${
                   active
-                    ? `${tab.activeClass} shadow-[0_0_15px_rgba(255,255,255,0.05)]`
+                    ? `${tab.activeClass}`
                     : "border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
                 }`}
               >
@@ -167,17 +167,13 @@ export default function AuditPage() {
           </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {activeDocuments.map((doc, i) => (
+            {activeDocuments.map((doc) => (
               <div
                 key={doc.id}
                 className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/40"
               >
                 <div className="mb-2 flex items-start justify-between gap-3">
-                  <h3
-                    className={`neon-text-${
-                      i % 2 === 0 ? "cyan" : "pink"
-                    } text-sm font-semibold`}
-                  >
+                  <h3 className="text-sm font-semibold text-zinc-50">
                     {doc.title}
                   </h3>
                   <span className="shrink-0 rounded bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
@@ -190,13 +186,13 @@ export default function AuditPage() {
                 <div className="mt-3 flex justify-end gap-2">
                   <button
                     onClick={() => openEdit(doc)}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
+                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(doc)}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                   >
                     Delete
                   </button>
@@ -228,7 +224,7 @@ export default function AuditPage() {
               }
               autoFocus
               required
-              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60"
+              className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-300"
             />
           </label>
           <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
@@ -238,7 +234,7 @@ export default function AuditPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Details, scope, findings, or actions"
               rows={4}
-              className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60"
+              className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-300"
             />
           </label>
           <p className="rounded-lg bg-zinc-900 px-3 py-2 text-xs text-zinc-500">
@@ -248,7 +244,7 @@ export default function AuditPage() {
             </span>
           </p>
           {error && (
-            <p className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-400">
+            <p className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">
               {error}
             </p>
           )}
@@ -257,7 +253,7 @@ export default function AuditPage() {
               <button
                 type="button"
                 onClick={() => handleDelete(editing)}
-                className="rounded-lg bg-red-950/40 px-4 py-2.5 text-sm font-medium text-red-400 transition-all duration-300 hover:bg-red-950/70"
+                className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-300 transition-all duration-300 hover:border-zinc-300 hover:text-white"
               >
                 Delete
               </button>
@@ -265,7 +261,7 @@ export default function AuditPage() {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-lg bg-cyan-400/20 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-300 hover:bg-cyan-400/30 disabled:opacity-50"
+              className="flex-1 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition-all duration-300 hover:bg-zinc-700 disabled:opacity-50"
             >
               {saving ? "Saving..." : editing ? "Save Changes" : "Add"}
             </button>

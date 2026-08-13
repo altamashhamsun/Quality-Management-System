@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const NAV_ITEMS = [
-  { label: "Branches", path: "/branches", dot: "bg-cyan-400" },
-  { label: "Calendar", path: "/calendar", dot: "bg-pink-400" },
-  { label: "Audit", path: "/audit", dot: "bg-violet-400" },
+  { label: "Branches", path: "/branches" },
+  { label: "Calendar", path: "/calendar" },
+  { label: "Audit", path: "/audit" },
 ] as const;
 
 export default function Header({ email }: { email?: string | null }) {
@@ -43,11 +43,11 @@ export default function Header({ email }: { email?: string | null }) {
   }
 
   const dropdownClass =
-    "absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)]";
+    "absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)]";
 
   return (
     <header className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3 sm:px-6">
-      <h1 className="neon-text-cyan text-xl font-bold tracking-tight sm:text-2xl">
+      <h1 className="text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl">
         Compliance IOS
       </h1>
 
@@ -58,9 +58,8 @@ export default function Header({ email }: { email?: string | null }) {
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setOpen((prev) => !prev)}
-            className="flex items-center gap-2 rounded-lg border border-cyan-400/50 px-3 py-1.5 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.3)]"
+            className="flex items-center gap-2 rounded-lg border border-zinc-600 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors duration-300 hover:border-zinc-300 hover:text-white"
           >
-            <span className={`h-2 w-2 rounded-full ${currentItem.dot}`} />
             {currentItem.label}
             <svg
               width="10"
@@ -89,14 +88,13 @@ export default function Header({ email }: { email?: string | null }) {
                     onClick={() => navigate(item.path)}
                     className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                       active
-                        ? "bg-cyan-400/10 text-cyan-300"
-                        : "text-zinc-300 hover:bg-zinc-900 hover:text-cyan-200"
+                        ? "bg-zinc-100 text-zinc-950"
+                        : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
                     }`}
                   >
-                    <span className={`h-2 w-2 rounded-full ${item.dot}`} />
                     {item.label}
                     {item.label === "Branches" && (
-                      <span className="ml-auto rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                      <span className="ml-auto rounded border border-zinc-600 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-400">
                         Default
                       </span>
                     )}
@@ -108,7 +106,7 @@ export default function Header({ email }: { email?: string | null }) {
         </div>
         <button
           onClick={handleSignOut}
-          className="rounded-lg border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-pink-500/60 hover:text-pink-400"
+          className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
         >
           Sign Out
         </button>

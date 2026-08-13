@@ -188,7 +188,7 @@ export default function NcrPage() {
   }
 
   const inputClass =
-    "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-cyan-400/60";
+    "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-300";
 
   const query = search.trim().toLowerCase();
   const filteredRecords = query
@@ -211,11 +211,11 @@ export default function NcrPage() {
           <div>
             <button
               onClick={() => router.push(`/branches/${params.id}`)}
-              className="mb-1 text-xs text-zinc-500 transition-colors hover:text-cyan-300"
+              className="mb-1 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
             >
               &larr; Back to Departments
             </button>
-            <h2 className="neon-text-violet text-lg font-semibold">
+            <h2 className="text-lg font-semibold text-zinc-50">
               {dataLoading ? "..." : deptName ?? "Department"}
             </h2>
             <p className="text-xs text-zinc-500">
@@ -226,20 +226,20 @@ export default function NcrPage() {
             <button
               onClick={handleExport}
               disabled={records.length === 0}
-              className="rounded-lg border-2 border-pink-500/60 px-4 py-2 text-sm font-medium text-pink-400 shadow-[0_0_15px_rgba(244,114,182,0.2)] transition-all duration-300 hover:bg-pink-500/10 hover:shadow-[0_0_25px_rgba(244,114,182,0.4)] disabled:opacity-40"
+              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
             >
               Export XLSX
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              className="rounded-lg border-2 border-violet-500/60 px-4 py-2 text-sm font-medium text-violet-400 shadow-[0_0_15px_rgba(167,139,250,0.2)] transition-all duration-300 hover:bg-violet-500/10 hover:shadow-[0_0_25px_rgba(167,139,250,0.4)] disabled:opacity-40"
+              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
             >
               {importing ? "Importing..." : "Import XLSX"}
             </button>
             <button
               onClick={openCreate}
-              className="rounded-lg border-2 border-cyan-400/60 px-4 py-2 text-sm font-medium text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all duration-300 hover:bg-cyan-400/10 hover:shadow-[0_0_25px_rgba(34,211,238,0.4)]"
+              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800"
             >
               + Create NCR
             </button>
@@ -258,25 +258,22 @@ export default function NcrPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search issues..."
-          className="mb-4 w-full rounded-lg border border-cyan-400/40 bg-zinc-950 px-4 py-2 text-sm text-zinc-50 shadow-[0_0_15px_rgba(34,211,238,0.1)] outline-none transition-all duration-300 placeholder:text-zinc-600 focus:border-cyan-400/80 focus:shadow-[0_0_25px_rgba(34,211,238,0.2)]"
+          className="mb-4 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm text-zinc-50 outline-none transition-colors duration-300 placeholder:text-zinc-600 focus:border-zinc-300"
         />
 
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          <StatsTile label="Total NCRs" value={records.length} color="cyan" />
+          <StatsTile label="Total NCRs" value={records.length} />
           <StatsTile
             label="Action Taken"
             value={records.filter((r) => r.status === "Action Taken").length}
-            color="amber"
           />
           <StatsTile
             label="Action Not Taken Yet"
             value={records.filter((r) => r.status === "Action Not Taken Yet").length}
-            color="red"
           />
           <StatsTile
             label="Done"
             value={records.filter((r) => r.status === "Done").length}
-            color="green"
           />
         </div>
 
@@ -298,7 +295,7 @@ export default function NcrPage() {
                 className="mb-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
               >
                 <div className="mb-2 flex items-start justify-between gap-2">
-                  <p className="neon-text-cyan text-sm font-semibold">
+                  <p className="text-sm font-semibold text-zinc-50">
                     {record.ncr_number || "NCR"}
                   </p>
                   <StatusBadge status={record.status} />
@@ -326,13 +323,13 @@ export default function NcrPage() {
                 <div className="mt-3 flex justify-end gap-2">
                   <button
                     onClick={() => openEdit(record)}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
+                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(record)}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                   >
                     Delete
                   </button>
@@ -355,12 +352,12 @@ export default function NcrPage() {
                 {FIELDS.map((f) => (
                   <th
                     key={f.key}
-                    className="break-words px-1.5 py-2 align-top text-[10px] font-semibold uppercase tracking-wide text-cyan-300"
+                    className="break-words px-1.5 py-2 align-top text-[10px] font-semibold uppercase tracking-wide text-zinc-400"
                   >
                     {f.label}
                   </th>
                 ))}
-                <th className="px-1.5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-cyan-300">
+                <th className="px-1.5 py-2 text-right text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                   Actions
                 </th>
               </tr>
@@ -421,13 +418,13 @@ export default function NcrPage() {
                     <td className="whitespace-nowrap px-1.5 py-2 text-right">
                       <button
                         onClick={() => openEdit(record)}
-                        className="mr-2 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-cyan-400/60 hover:text-cyan-300"
+                        className="mr-2 rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(record)}
-                        className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-red-500/60 hover:text-red-400"
+                        className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
                       >
                         Delete
                       </button>
@@ -464,14 +461,14 @@ export default function NcrPage() {
             ))}
           </div>
           {error && (
-            <p className="rounded-lg bg-red-950/50 px-3 py-2 text-sm text-red-400">
+            <p className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">
               {error}
             </p>
           )}
           <button
             type="submit"
             disabled={saving}
-            className="mt-2 rounded-lg bg-cyan-400/20 px-4 py-2.5 text-sm font-medium text-cyan-300 transition-all duration-300 hover:bg-cyan-400/30 disabled:opacity-50"
+            className="mt-2 rounded-lg border border-zinc-600 bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition-all duration-300 hover:bg-zinc-700 disabled:opacity-50"
           >
             {saving ? "Saving..." : editingId ? "Save Changes" : "Create NCR"}
           </button>
