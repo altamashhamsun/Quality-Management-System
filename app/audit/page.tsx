@@ -24,7 +24,6 @@ type AuditDocument = {
 
 const TABS = [
   { key: "plan", label: "Audit Plans", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
-  { key: "report", label: "Audit Reports", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "capa", label: "Corrective & Preventive Action", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "auditor", label: "Auditor", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "auditReport", label: "Audit Report", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
@@ -250,7 +249,7 @@ export default function AuditPage() {
           <div>
             <h2 className="text-xl font-semibold text-zinc-50">Audit</h2>
             <p className="mt-1 text-sm text-zinc-500">
-              Manage audit plans, audit reports, and corrective & preventive actions
+              Manage audit plans, corrective & preventive actions, and generate audit reports
             </p>
           </div>
           {activeTab !== "auditor" && activeTab !== "auditReport" && (
@@ -374,9 +373,7 @@ export default function AuditPage() {
               placeholder={
                 activeTab === "plan"
                   ? "e.g. Q3 Internal Audit Plan"
-                  : activeTab === "report"
-                    ? "e.g. Q3 Audit Report"
-                    : "e.g. CAPA-001: Corrective action for found NC"
+                  : "e.g. CAPA-001: Corrective action for found NC"
               }
               autoFocus
               required

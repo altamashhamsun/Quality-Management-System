@@ -36,138 +36,131 @@ const PAGE_W = 210;
 const PAGE_H = 297;
 const MAX_W = PAGE_W - MARGIN * 2;
 
+const DARK = [22, 22, 30] as const;
+const ACCENT = [200, 30, 40] as const;
+const INK = [30, 30, 40] as const;
+const BODY = [52, 52, 62] as const;
+const MUTED = [130, 130, 140] as const;
+const LIGHT = [247, 247, 250] as const;
+const BORDER = [218, 218, 224] as const;
+const HEAD_FILL: readonly [number, number, number] = [26, 26, 34];
+const ROW_FILL: readonly [number, number, number] = [248, 248, 250];
+
 function wrap(doc: jsPDF, text: string, maxWidth: number): string[] {
   if (!text) return [""];
   const lines: string[] = [];
   for (const chunk of text.split("\n")) {
-    lines.push(...(doc.splitTextToSize(chunk, maxWidth) as string[]));
+    const wrapped = doc.splitTextToSize(chunk, maxWidth) as string[];
+    lines.push(...(wrapped.length ? wrapped : [""]));
   }
-  return lines;
+  return lines.length ? lines : [""];
 }
 
 export function downloadAuditReportPdf(data: AuditReportPdfData) {
   const doc = new jsPDF("p", "mm", "a4");
-  let y = 16;
+  let y = 0;
 
-  const newPage = () => {
+  const newPage = (top = 24) => {
     doc.addPage();
-    y = 24;
+    y = top;
   };
 
   const ensure = (need: number) => {
     if (PAGE_H - y < need) newPage();
   };
 
-  const para = (text: string, size = 10, lineH = 5) => {
-    if (!text) return;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(size);
-    doc.setTextColor(45, 45, 55);
+  const sectionHeader = (title: string) => {
+    ensure(26);
+    y += 4;
+    doc.setFillColor(...ACCENT);
+    doc.rect(MARGIN, y - 4.5, 2.4, 5.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(...INK);
+    doc.text(title, MARGIN + 6, y);
+    y += 3;
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.4);
+    doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+    doc.setLineWidth(0.2);
+    y += 7;
+  };
+
+  const body = (text: string, lineH = 5) => {
     const lines = wrap(doc, text, MAX_W);
+    if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) return;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...BODY);
     for (const line of lines) {
-      ensure(lineH);
+      ensure(lineH + 4);
       doc.text(line, MARGIN, y);
       y += lineH;
+    }
+    y += 3;
+  };
+
+  const emptyBox = (message: string, height = 13) => {
+    ensure(height + 6);
+    doc.setDrawColor(205, 205, 212);
+    doc.setFillColor(250, 250, 252);
+    doc.setLineDashPattern([2, 2], 0);
+    doc.rect(MARGIN, y, MAX_W, height, "FD");
+    doc.setLineDashPattern([], 0);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 160);
+    const msgLines = wrap(doc, message, MAX_W - 8);
+    doc.text(msgLines.slice(0, 2), MARGIN + 4, y + 7.5);
+    y += height + 5;
+  };
+
+  const bullet = (text: string) => {
+    const lines = wrap(doc, text, MAX_W - 8);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...BODY);
+    for (let i = 0; i < lines.length; i++) {
+      ensure(5.5);
+      doc.text(i === 0 ? "•" : "", MARGIN, y);
+      doc.text(lines[i], MARGIN + 5, y);
+      y += 5;
     }
     y += 2;
   };
 
-  const header = (title: string) => {
-    ensure(18);
-    doc.setFillColor(22, 22, 30);
-    doc.rect(0, y - 5, PAGE_W, 10, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(255, 255, 255);
-    doc.text(title.toUpperCase(), MARGIN, y);
-    y += 6;
-    doc.setDrawColor(200, 30, 40);
-    doc.setLineWidth(1);
-    doc.line(MARGIN, y, PAGE_W - MARGIN, y);
-    doc.setLineWidth(0.2);
-    y += 3;
-  };
-
-  const ncsTable = (title: string, ncs: ReportNc[], color: [number, number, number]) => {
-    if (ncs.length === 0) return;
-    ensure(40);
-    header(title);
-
-    const cols = [24, 86, 30, 20, 26];
-    const colX: number[] = [];
-    let x = MARGIN;
-    for (const w of cols) {
-      colX.push(x);
-      x += w;
-    }
-    const renderRow = (cells: string[], h: number, isHead: boolean) => {
-      ensure(h);
-      if (isHead) doc.setFillColor(color[0], color[1], color[2]);
-      else doc.setFillColor(248, 248, 250);
-      doc.rect(MARGIN, y - 2, MAX_W, h, "F");
-      doc.setFont("helvetica", isHead ? "bold" : "normal");
-      doc.setFontSize(7.5);
-      for (let c = 0; c < cells.length; c++) {
-        const vLines = wrap(doc, cells[c] ?? "—", cols[c] - 4);
-        doc.setTextColor(255, 255, 255);
-        doc.text(vLines[0] ?? "", colX[c] + 2, y);
-        for (let i = 1; i < vLines.length; i++) {
-          ensure(h);
-          doc.text(vLines[i], colX[c] + 2, y + i * 4);
-        }
-      }
-      y += h;
-    };
-
-    const headH = 8;
-    const heights = ncs.map((nc) => {
-      const a = wrap(doc, nc.ncrNumber || "—", cols[0] - 4);
-      const b = wrap(doc, nc.description || "—", cols[1] - 4);
-      const c = wrap(doc, nc.clause || "—", cols[2] - 4);
-      const d = wrap(doc, nc.priority || "—", cols[3] - 4);
-      const e = wrap(doc, nc.deadline || "—", cols[4] - 4);
-      return Math.max(a.length, b.length, c.length, d.length, e.length, 1) * 4 + 6;
-    });
-
-    renderRow(["NCR #", "Finding / Non-Conformance", "Clause", "Priority", "Deadline"], headH, true);
-    ncs.forEach((nc, i) => {
-      const h = heights[i];
-      if (PAGE_H - y < h + 6) {
-        newPage();
-        renderRow(["NCR #", "Finding / Non-Conformance", "Clause", "Priority", "Deadline"], headH, true);
-      }
-      renderRow([nc.ncrNumber, nc.description, nc.clause, nc.priority, nc.deadline], h, false);
-    });
-    y += 4;
-  };
-
-  // ---- COVER HEADER ----
-  doc.setFillColor(22, 22, 30);
+  // ---------- COVER ----------
+  doc.setFillColor(...DARK);
   doc.rect(0, 0, PAGE_W, 30, "F");
-  doc.setFillColor(200, 30, 40);
-  doc.rect(0, 30, PAGE_W, 2, "F");
+  doc.setFillColor(...ACCENT);
+  doc.rect(0, 30, PAGE_W, 2.2, "F");
+
   doc.setTextColor(235, 235, 240);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(13);
   doc.text("COMPLIANCE IOS", MARGIN, 13);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(170, 170, 180);
-  doc.text("Internal Audit Report", MARGIN, 20);
+  doc.text("Internal Audit Management System", MARGIN, 20);
 
-  y = 44;
-  doc.setTextColor(30, 30, 40);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(17);
+  doc.setFontSize(8.5);
+  doc.setTextColor(255, 255, 255);
+  doc.setFillColor(...ACCENT);
+  doc.roundedRect(PAGE_W - MARGIN - 50, 10, 50, 10, 1.5, 1.5, "F");
+  doc.text("INTERNAL AUDIT REPORT", PAGE_W - MARGIN - 25, 17, { align: "center" });
+
+  // ---------- TITLE ----------
+  y = 48;
+  doc.setTextColor(...INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(19);
   const titleLines = wrap(doc, data.title || "Audit Report", MAX_W);
   doc.text(titleLines, MARGIN, y);
-  y += titleLines.length * 7 + 2;
-  doc.setFontSize(11);
-  doc.setTextColor(140, 30, 35);
-  doc.text("INTERNAL AUDIT REPORT", MARGIN, y);
-  y += 8;
+  y += titleLines.length * 7.5 + 4;
 
-  // meta box
+  // ---------- META CARD ----------
   const meta: Array<[string, string]> = [
     ["Reference ID", data.reference],
     ["Location / Branch(es)", data.location || "—"],
@@ -175,102 +168,186 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     ["Auditor(s)", data.auditors || "—"],
     ["Lead Auditee(s)", data.leadAuditees || "—"],
   ];
-  const boxTop = y;
-  const metaLines = meta.map(([, v]) => wrap(doc, v, MAX_W - 50).length);
-  const boxH = 8 + meta.reduce((acc, m, i) => acc + Math.max(metaLines[i], 1) * 5, 0);
-  doc.setDrawColor(200, 200, 210);
-  doc.setFillColor(246, 246, 249);
-  doc.rect(MARGIN, boxTop, MAX_W, boxH, "FD");
-  y = boxTop + 6;
-  meta.forEach(([l, v], i) => {
+  const metaRows = meta.map(([, v]) => wrap(doc, v || "—", MAX_W - 60).length);
+  const rowH = 8;
+  const cardH = meta.reduce((acc, m, i) => acc + Math.max(metaRows[i], 1) * rowH, 0) + 6;
+
+  doc.setFillColor(...LIGHT);
+  doc.setDrawColor(...BORDER);
+  doc.roundedRect(MARGIN, y, MAX_W, cardH, 2, 2, "FD");
+  let my = y + 6;
+  for (let i = 0; i < meta.length; i++) {
+    const [label, value] = meta[i];
+    doc.setFillColor(222, 222, 228);
+    doc.rect(MARGIN, my - 4.5, 44, Math.max(metaRows[i], 1) * rowH + 2, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 90);
-    doc.text(l, MARGIN + 4, y);
+    doc.setFontSize(8.5);
+    doc.setTextColor(70, 70, 82);
+    doc.text(label, MARGIN + 4, my + 0.5);
     doc.setFont("helvetica", "normal");
-    doc.setTextColor(30, 30, 40);
-    const vLines = wrap(doc, v || "—", MAX_W - 50);
-    doc.text(vLines[0], MARGIN + 52, y);
-    y += Math.max(metaLines[i], 1) * 5;
-  });
-  y = boxTop + boxH + 8;
+    doc.setFontSize(9.5);
+    doc.setTextColor(...INK);
+    const wrapped = wrap(doc, value || "—", MAX_W - 60);
+    doc.text(wrapped, MARGIN + 52, my + 0.5);
+    my += Math.max(metaRows[i], 1) * rowH + 3;
+  }
+  y = my + 6;
 
-  // sections
-  if (data.overallAssessment) {
-    ensure(30);
-    header("1. Overall Assessment");
-    para(data.overallAssessment);
-    y += 3;
-  }
-  if (data.keyFindings) {
-    ensure(30);
-    header("2. Key Findings Highlights");
-    para(data.keyFindings);
-    y += 3;
-  }
-  if (data.scope) {
-    ensure(30);
-    header("3. Audit Scope");
-    para(data.scope);
-    y += 3;
-  }
-  if (data.criteria.length > 0) {
-    ensure(30);
-    header("4. Criteria / Standards");
-    data.criteria.forEach((c) => para("•  " + c));
-    y += 3;
-  }
-  if (data.methodology) {
-    ensure(30);
-    header("5. Methodology");
-    para(data.methodology);
-    y += 3;
-  }
+  // ---------- NARRATIVE SECTIONS ----------
+  sectionHeader("1. Overall Assessment");
+  if (data.overallAssessment) body(data.overallAssessment);
+  else emptyBox("No overall assessment recorded for this audit.");
 
-  // Detailed findings
-  ensure(30);
-  header("6. Detailed Audit Findings");
+  sectionHeader("2. Key Findings Highlights");
+  if (data.keyFindings) body(data.keyFindings);
+  else emptyBox("No key findings recorded for this audit.");
 
-  if (data.conformances) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(30, 90, 50);
-    doc.text("Conformances / Strengths", MARGIN, y);
-    y += 4;
-    para(data.conformances, 9.5);
+  sectionHeader("3. Audit Scope");
+  if (data.scope) body(data.scope);
+  else emptyBox("No audit scope recorded.");
+
+  sectionHeader("4. Criteria / Standards");
+  if (data.criteria.length === 0) {
+    emptyBox("No standards / criteria recorded for this audit.");
+  } else {
+    data.criteria.forEach((c) => bullet(c));
     y += 2;
   }
 
+  sectionHeader("5. Methodology");
+  if (data.methodology) body(data.methodology);
+  else emptyBox("No methodology recorded.");
+
+  // ---------- DETAILED FINDINGS ----------
+  sectionHeader("6. Detailed Audit Findings");
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(30, 30, 40);
-  doc.text("Non-Conformances", MARGIN, y);
-  y += 4;
+  doc.setTextColor(30, 90, 50);
+  doc.text("Conformances / Strengths", MARGIN, y);
+  y += 5;
+  if (data.conformances) body(data.conformances);
+  else emptyBox("No conformances / strengths recorded.");
 
-  ncsTable("Major Non-Conformances", data.majorNcs, [140, 30, 35]);
-  ncsTable("Minor Non-Conformances", data.minorNcs, [150, 110, 40]);
+  y += 3;
+  const ncTable = (
+    title: string,
+    ncs: ReportNc[],
+    emptyText: string,
+    accent: readonly [number, number, number],
+  ) => {
+    sectionHeader(title);
+    if (ncs.length === 0) {
+      emptyBox(emptyText);
+      return;
+    }
 
-  // OFI + consequences
+    const cols = [24, 88, 30, 22, 18];
+    const colX: number[] = [];
+    let x = MARGIN;
+    for (const w of cols) {
+      colX.push(x);
+      x += w;
+    }
+    const headers = ["NCR #", "Finding / Non-Conformance", "Clause", "Priority", "Deadline"];
+
+    const rowHeights = ncs.map((nc) => {
+      const cellLines = [
+        wrap(doc, nc.ncrNumber || "—", cols[0] - 4),
+        wrap(doc, nc.description || "—", cols[1] - 4),
+        wrap(doc, nc.clause || "—", cols[2] - 4),
+        wrap(doc, nc.priority || "—", cols[3] - 4),
+        wrap(doc, nc.deadline || "—", cols[4] - 4),
+      ];
+      return Math.max(...cellLines.map((l) => l.length), 1) * 4.2 + 6;
+    });
+
+    const renderRow = (cells: string[], h: number, isHead: boolean) => {
+      ensure(h + 4);
+      doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
+      doc.setDrawColor(...BORDER);
+      doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
+      doc.setFont("helvetica", isHead ? "bold" : "normal");
+      doc.setFontSize(7.5);
+      for (let c = 0; c < cells.length; c++) {
+        const cellLines = wrap(doc, cells[c] ?? "—", cols[c] - 4);
+        const lineH = 4.2;
+        for (let li = 0; li < cellLines.length; li++) {
+          if (li > 0) {
+            ensure(h + 4);
+            doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
+            doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
+          }
+          doc.setTextColor(isHead ? 255 : 40, isHead ? 255 : 40, isHead ? 255 : 55);
+          doc.text(cellLines[li], colX[c] + 2, y + lineH * li + 1.5);
+        }
+      }
+      // cell borders
+      for (let c = 0; c < cols.length; c++) {
+        doc.setDrawColor(...BORDER);
+        doc.setLineWidth(0.1);
+        doc.line(colX[c], y - 1.5, colX[c], y - 1.5 + h);
+        if (c === cols.length - 1) {
+          doc.line(colX[c] + cols[c], y - 1.5, colX[c] + cols[c], y - 1.5 + h);
+        }
+      }
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(...BORDER);
+      doc.line(MARGIN, y - 1.5 + h, PAGE_W - MARGIN, y - 1.5 + h);
+      y += h;
+    };
+
+    renderRow(headers, 8, true);
+    ncs.forEach((nc, i) => {
+      const h = rowHeights[i];
+      if (PAGE_H - y < h + 10) {
+        newPage();
+        renderRow(headers, 8, true);
+      }
+      renderRow(
+        [nc.ncrNumber, nc.description, nc.clause, nc.priority, nc.deadline],
+        h,
+        false,
+      );
+    });
+    y += 5;
+  };
+
+  ncTable(
+    "Major Non-Conformances",
+    data.majorNcs,
+    "No major non-conformances recorded.",
+    [140, 30, 35],
+  );
+  ncTable(
+    "Minor Non-Conformances",
+    data.minorNcs,
+    "No minor non-conformances recorded.",
+    [150, 110, 40],
+  );
+
+  // ---------- OFI ----------
+  sectionHeader("7. Opportunities for Improvement");
   const ofi = [...data.majorNcs, ...data.minorNcs].filter(
     (n) => n.correctiveAction || n.preventiveAction,
   );
-  if (ofi.length > 0) {
-    ensure(30);
-    header("7. Opportunities for Improvement");
+  if (ofi.length === 0) {
+    emptyBox("No corrective or preventive actions recorded.");
+  } else {
     for (const nc of ofi) {
       ensure(20);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
-      doc.setTextColor(30, 30, 40);
+      doc.setTextColor(...INK);
       doc.text(nc.ncrNumber, MARGIN, y);
       y += 4.5;
       if (nc.correctiveAction) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.setTextColor(80, 80, 90);
+        doc.setTextColor(70, 70, 82);
         doc.text("Corrective Action: ", MARGIN, y);
         doc.setFont("helvetica", "normal");
-        doc.setTextColor(45, 45, 55);
+        doc.setTextColor(...BODY);
         const caLines = wrap(doc, nc.correctiveAction, MAX_W - 34);
         doc.text(caLines[0], MARGIN + 34, y);
         y += Math.max(caLines.length, 1) * 4.5;
@@ -278,10 +355,10 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
       if (nc.preventiveAction) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.setTextColor(80, 80, 90);
+        doc.setTextColor(70, 70, 82);
         doc.text("Preventive Action: ", MARGIN, y);
         doc.setFont("helvetica", "normal");
-        doc.setTextColor(45, 45, 55);
+        doc.setTextColor(...BODY);
         const paLines = wrap(doc, nc.preventiveAction, MAX_W - 34);
         doc.text(paLines[0], MARGIN + 34, y);
         y += Math.max(paLines.length, 1) * 4.5;
@@ -289,10 +366,10 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
       if (nc.consequences) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.setTextColor(140, 40, 40);
+        doc.setTextColor(...ACCENT);
         doc.text("Consequence: ", MARGIN, y);
         doc.setFont("helvetica", "normal");
-        doc.setTextColor(45, 45, 55);
+        doc.setTextColor(...BODY);
         const coLines = wrap(doc, nc.consequences, MAX_W - 30);
         doc.text(coLines[0], MARGIN + 30, y);
         y += Math.max(coLines.length, 1) * 4.5;
@@ -301,160 +378,181 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     }
   }
 
-  // CAP
+  // ---------- CAP ----------
+  sectionHeader("8. Corrective Action Plan (CAP)");
   const capNcs = ofi.filter((n) => n.rootCause);
-  if (capNcs.length > 0) {
-    ensure(30);
-    header("8. Corrective Action Plan (CAP)");
-
+  if (capNcs.length === 0) {
+    emptyBox("No root cause analysis recorded for this audit.");
+  } else {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(30, 30, 40);
+    doc.setTextColor(...INK);
     doc.text("Root Cause Analysis (RCA)", MARGIN, y);
     y += 4.5;
     for (const nc of capNcs) {
       ensure(14);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.setTextColor(80, 80, 90);
+      doc.setTextColor(70, 70, 82);
       doc.text(`${nc.ncrNumber}: `, MARGIN, y);
       doc.setFont("helvetica", "normal");
-      doc.setTextColor(45, 45, 55);
+      doc.setTextColor(...BODY);
       const rcLines = wrap(doc, nc.rootCause, MAX_W - 24);
       doc.text(rcLines[0], MARGIN + 24, y);
       y += Math.max(rcLines.length, 1) * 4.5;
     }
-    y += 3;
+    y += 4;
 
-    const cols2 = [24, 76, 76, 20];
+    const cols2 = [24, 80, 76, 22];
     const col2X: number[] = [];
     let x2 = MARGIN;
     for (const w of cols2) {
       col2X.push(x2);
       x2 += w;
     }
+    const headers2 = ["NCR #", "Corrective Action", "Preventive Action", "Deadline"];
     const h2 = capNcs.map((nc) => {
-      const a = wrap(doc, nc.ncrNumber || "—", cols2[0] - 4);
-      const b = wrap(doc, nc.correctiveAction || "—", cols2[1] - 4);
-      const c = wrap(doc, nc.preventiveAction || "—", cols2[2] - 4);
-      const d = wrap(doc, nc.deadline || "—", cols2[3] - 4);
-      return Math.max(a.length, b.length, c.length, d.length, 1) * 4 + 6;
+      const cellLines = [
+        wrap(doc, nc.ncrNumber || "—", cols2[0] - 4),
+        wrap(doc, nc.correctiveAction || "—", cols2[1] - 4),
+        wrap(doc, nc.preventiveAction || "—", cols2[2] - 4),
+        wrap(doc, nc.deadline || "—", cols2[3] - 4),
+      ];
+      return Math.max(...cellLines.map((l) => l.length), 1) * 4.2 + 6;
     });
 
     const renderRow2 = (cells: string[], h: number, isHead: boolean) => {
-      ensure(h);
-      if (isHead) doc.setFillColor(22, 22, 30);
-      else doc.setFillColor(248, 248, 250);
-      doc.rect(MARGIN, y - 2, MAX_W, h, "F");
+      ensure(h + 4);
+      doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
+      doc.setDrawColor(...BORDER);
+      doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
       doc.setFont("helvetica", isHead ? "bold" : "normal");
       doc.setFontSize(7.5);
       for (let c = 0; c < cells.length; c++) {
-        const vLines = wrap(doc, cells[c] ?? "—", cols2[c] - 4);
-        doc.setTextColor(255, 255, 255);
-        doc.text(vLines[0] ?? "", col2X[c] + 2, y);
-        for (let i = 1; i < vLines.length; i++) {
-          doc.text(vLines[i], col2X[c] + 2, y + i * 4);
+        const cellLines = wrap(doc, cells[c] ?? "—", cols2[c] - 4);
+        for (let li = 0; li < cellLines.length; li++) {
+          doc.setTextColor(isHead ? 255 : 40, isHead ? 255 : 40, isHead ? 255 : 55);
+          doc.text(cellLines[li], col2X[c] + 2, y + 4.2 * li + 1.5);
         }
       }
+      for (let c = 0; c < cols2.length; c++) {
+        doc.setDrawColor(...BORDER);
+        doc.setLineWidth(0.1);
+        doc.line(col2X[c], y - 1.5, col2X[c], y - 1.5 + h);
+        if (c === cols2.length - 1) {
+          doc.line(col2X[c] + cols2[c], y - 1.5, col2X[c] + cols2[c], y - 1.5 + h);
+        }
+      }
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(...BORDER);
+      doc.line(MARGIN, y - 1.5 + h, PAGE_W - MARGIN, y - 1.5 + h);
       y += h;
     };
 
-    renderRow2(["NCR #", "Corrective Action", "Preventive Action", "Deadline"], 8, true);
+    renderRow2(headers2, 8, true);
     capNcs.forEach((nc, i) => {
-      if (PAGE_H - y < h2[i] + 6) {
+      if (PAGE_H - y < h2[i] + 10) {
         newPage();
-        renderRow2(["NCR #", "Corrective Action", "Preventive Action", "Deadline"], 8, true);
+        renderRow2(headers2, 8, true);
       }
       renderRow2([nc.ncrNumber, nc.correctiveAction, nc.preventiveAction, nc.deadline], h2[i], false);
     });
-    y += 4;
+    y += 5;
   }
 
-  // Sign-off
-  ensure(70);
-  header("9. Formal Sign-Off & Evidence");
+  // ---------- SIGN-OFF ----------
+  sectionHeader("9. Formal Sign-Off & Evidence");
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(30, 30, 40);
+  doc.setFontSize(10.5);
+  doc.setTextColor(...INK);
   doc.text("Auditor", MARGIN, y);
-  y += 3;
+  y += 3.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(80, 80, 90);
+  doc.setTextColor(...MUTED);
   doc.text(data.auditors || "Name & signature of lead auditor", MARGIN, y);
-  y += 6;
+  y += 7;
   doc.setDrawColor(150, 150, 160);
   doc.line(MARGIN, y, MARGIN + 80, y);
   doc.line(MARGIN + 90, y, PAGE_W - MARGIN, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.setTextColor(130, 130, 140);
-  doc.text("Signature & Date", MARGIN + 28, y + 4);
-  doc.text("Signature & Date", MARGIN + 118, y + 4);
-  y += 14;
+  doc.setTextColor(...MUTED);
+  doc.text("Signature & Date", MARGIN + 30, y + 4);
+  doc.text("Signature & Date", MARGIN + 120, y + 4);
+  y += 15;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(30, 30, 40);
+  doc.setFontSize(10.5);
+  doc.setTextColor(...INK);
   doc.text("Management", MARGIN, y);
-  y += 3;
+  y += 3.5;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(80, 80, 90);
+  doc.setTextColor(...MUTED);
   doc.text(data.leadAuditees || "Name & signature of management representative", MARGIN, y);
-  y += 6;
+  y += 7;
   doc.setDrawColor(150, 150, 160);
   doc.line(MARGIN, y, MARGIN + 80, y);
   doc.line(MARGIN + 90, y, PAGE_W - MARGIN, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.setTextColor(130, 130, 140);
-  doc.text("Signature & Date", MARGIN + 28, y + 4);
-  doc.text("Signature & Date", MARGIN + 118, y + 4);
-  y += 14;
+  doc.setTextColor(...MUTED);
+  doc.text("Signature & Date", MARGIN + 30, y + 4);
+  doc.text("Signature & Date", MARGIN + 120, y + 4);
+  y += 15;
 
-  // Evidence photos
-  if (data.photos.length > 0) {
-    ensure(30);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(30, 30, 40);
-    doc.text("Appendices / Evidence", MARGIN, y);
-    y += 5;
+  // ---------- EVIDENCE PHOTOS ----------
+  sectionHeader("Appendices / Evidence");
+  if (data.photos.length === 0) {
+    emptyBox("No evidence photos attached to the NCRs of this audit.");
+  } else {
     const maxPhotos = Math.min(data.photos.length, 12);
     const perRow = 3;
-    const imgW = (MAX_W - (perRow - 1) * 5) / perRow;
+    const gap = 5;
+    const imgW = (MAX_W - (perRow - 1) * gap) / perRow;
+    const imgH = 40;
     for (let i = 0; i < maxPhotos; i++) {
       const col = i % perRow;
-      if (col === 0) {
-        ensure(50);
-      }
+      if (col === 0) ensure(imgH + 10);
       const url = data.photos[i];
       const fmt = url.startsWith("data:image/png") ? "PNG" : "JPEG";
-      const x = MARGIN + col * (imgW + 5);
-      const imgH = 40;
+      const x = MARGIN + col * (imgW + gap);
       try {
         doc.addImage(url, fmt, x, y, imgW, imgH);
       } catch {
-        // skip unloadable image
+        doc.setFillColor(240, 240, 243);
+        doc.setDrawColor(...BORDER);
+        doc.rect(x, y, imgW, imgH, "FD");
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(...MUTED);
+        doc.text("Photo", x + imgW / 2, y + imgH / 2, { align: "center" });
       }
-      if (col === perRow - 1) y += imgH + 5;
+      if (col === perRow - 1) y += imgH + gap;
     }
   }
 
-  // footer page numbers
+  // ---------- FOOTER ----------
   const total = doc.getNumberOfPages();
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
-    doc.setDrawColor(220, 220, 225);
-    doc.line(MARGIN, PAGE_H - 12, PAGE_W - MARGIN, PAGE_H - 12);
+    doc.setDrawColor(222, 222, 227);
+    doc.line(MARGIN, PAGE_H - 13, PAGE_W - MARGIN, PAGE_H - 13);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(130, 130, 140);
+    doc.setTextColor(...MUTED);
     doc.text(
       `${data.reference || ""}  |  Page ${i} of ${total}`,
       MARGIN,
-      PAGE_H - 7,
+      PAGE_H - 7.5,
+    );
+    doc.text(
+      `Generated ${new Date().toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}`,
+      PAGE_W - MARGIN,
+      PAGE_H - 7.5,
+      { align: "right" },
     );
   }
 
