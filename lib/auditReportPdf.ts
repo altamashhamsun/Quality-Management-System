@@ -129,6 +129,68 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     y += 2;
   };
 
+  // ---------- TABLE RENDERER ----------
+  const PAD = 2;
+  const LINE_H = 4.2;
+  const HEAD_H = 9;
+
+  const renderTable = (headers: string[], colWidths: number[], rows: string[][]) => {
+    if (rows.length === 0) return;
+
+    // measure with the same font that will be used to draw
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+
+    const rowHeight = (cells: string[]) => {
+      let maxLines = 1;
+      cells.forEach((cell, c) => {
+        const n = wrap(doc, cell || "—", colWidths[c] - PAD * 2).length;
+        maxLines = Math.max(maxLines, n);
+      });
+      return Math.max(maxLines * LINE_H + 4, 8);
+    };
+
+    const drawRow = (cells: string[], h: number, isHead: boolean) => {
+      doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
+      doc.setDrawColor(...BORDER);
+      doc.rect(MARGIN, y - 2, MAX_W, h, "F");
+      doc.setFont("helvetica", isHead ? "bold" : "normal");
+      doc.setFontSize(7.5);
+      let cx = MARGIN;
+      for (let c = 0; c < cells.length; c++) {
+        const cellLines = wrap(doc, cells[c] || "—", colWidths[c] - PAD * 2);
+        doc.setTextColor(isHead ? 255 : 40, isHead ? 255 : 40, isHead ? 255 : 55);
+        cellLines.forEach((line, li) => {
+          doc.text(line, cx + PAD, y + LINE_H * li + 2.2);
+        });
+        cx += colWidths[c];
+      }
+      // borders
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.15);
+      let bx = MARGIN;
+      for (let c = 0; c < colWidths.length; c++) {
+        doc.line(bx, y - 2, bx, y - 2 + h);
+        bx += colWidths[c];
+      }
+      doc.line(bx, y - 2, bx, y - 2 + h);
+      doc.line(MARGIN, y - 2 + h, bx, y - 2 + h);
+      doc.setLineWidth(0.2);
+      y += h;
+    };
+
+    drawRow(headers, HEAD_H, true);
+    rows.forEach((row) => {
+      const h = rowHeight(row);
+      if (PAGE_H - y < h + 6) {
+        newPage();
+        drawRow(headers, HEAD_H, true);
+      }
+      drawRow(row, h, false);
+    });
+    y += 5;
+  };
+
   // ---------- COVER ----------
   doc.setFillColor(...DARK);
   doc.rect(0, 0, PAGE_W, 30, "F");
@@ -230,101 +292,31 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
   else emptyBox("No conformances / strengths recorded.");
 
   y += 3;
-  const ncTable = (
-    title: string,
-    ncs: ReportNc[],
-    emptyText: string,
-    accent: readonly [number, number, number],
-  ) => {
-    sectionHeader(title);
-    if (ncs.length === 0) {
-      emptyBox(emptyText);
-      return;
-    }
 
-    const cols = [24, 88, 30, 22, 18];
-    const colX: number[] = [];
-    let x = MARGIN;
-    for (const w of cols) {
-      colX.push(x);
-      x += w;
-    }
-    const headers = ["NCR #", "Finding / Non-Conformance", "Clause", "Priority", "Deadline"];
+  const ncColumns = [26, 74, 30, 28, 24];
+  const ncHeaders = ["NCR #", "Finding / Non-Conformance", "Clause", "Priority", "Deadline"];
+  const ncRows = (ncs: ReportNc[]) =>
+    ncs.map((nc) => [
+      nc.ncrNumber,
+      nc.description,
+      nc.clause,
+      nc.priority,
+      nc.deadline,
+    ]);
 
-    const rowHeights = ncs.map((nc) => {
-      const cellLines = [
-        wrap(doc, nc.ncrNumber || "—", cols[0] - 4),
-        wrap(doc, nc.description || "—", cols[1] - 4),
-        wrap(doc, nc.clause || "—", cols[2] - 4),
-        wrap(doc, nc.priority || "—", cols[3] - 4),
-        wrap(doc, nc.deadline || "—", cols[4] - 4),
-      ];
-      return Math.max(...cellLines.map((l) => l.length), 1) * 4.2 + 6;
-    });
+  sectionHeader("Major Non-Conformances");
+  if (data.majorNcs.length === 0) {
+    emptyBox("No major non-conformances recorded.");
+  } else {
+    renderTable(ncHeaders, ncColumns, ncRows(data.majorNcs));
+  }
 
-    const renderRow = (cells: string[], h: number, isHead: boolean) => {
-      ensure(h + 4);
-      doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
-      doc.setDrawColor(...BORDER);
-      doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
-      doc.setFont("helvetica", isHead ? "bold" : "normal");
-      doc.setFontSize(7.5);
-      for (let c = 0; c < cells.length; c++) {
-        const cellLines = wrap(doc, cells[c] ?? "—", cols[c] - 4);
-        const lineH = 4.2;
-        for (let li = 0; li < cellLines.length; li++) {
-          if (li > 0) {
-            ensure(h + 4);
-            doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
-            doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
-          }
-          doc.setTextColor(isHead ? 255 : 40, isHead ? 255 : 40, isHead ? 255 : 55);
-          doc.text(cellLines[li], colX[c] + 2, y + lineH * li + 1.5);
-        }
-      }
-      // cell borders
-      for (let c = 0; c < cols.length; c++) {
-        doc.setDrawColor(...BORDER);
-        doc.setLineWidth(0.1);
-        doc.line(colX[c], y - 1.5, colX[c], y - 1.5 + h);
-        if (c === cols.length - 1) {
-          doc.line(colX[c] + cols[c], y - 1.5, colX[c] + cols[c], y - 1.5 + h);
-        }
-      }
-      doc.setLineWidth(0.2);
-      doc.setDrawColor(...BORDER);
-      doc.line(MARGIN, y - 1.5 + h, PAGE_W - MARGIN, y - 1.5 + h);
-      y += h;
-    };
-
-    renderRow(headers, 8, true);
-    ncs.forEach((nc, i) => {
-      const h = rowHeights[i];
-      if (PAGE_H - y < h + 10) {
-        newPage();
-        renderRow(headers, 8, true);
-      }
-      renderRow(
-        [nc.ncrNumber, nc.description, nc.clause, nc.priority, nc.deadline],
-        h,
-        false,
-      );
-    });
-    y += 5;
-  };
-
-  ncTable(
-    "Major Non-Conformances",
-    data.majorNcs,
-    "No major non-conformances recorded.",
-    [140, 30, 35],
-  );
-  ncTable(
-    "Minor Non-Conformances",
-    data.minorNcs,
-    "No minor non-conformances recorded.",
-    [150, 110, 40],
-  );
+  sectionHeader("Minor Non-Conformances");
+  if (data.minorNcs.length === 0) {
+    emptyBox("No minor non-conformances recorded.");
+  } else {
+    renderTable(ncHeaders, ncColumns, ncRows(data.minorNcs));
+  }
 
   // ---------- OFI ----------
   sectionHeader("7. Opportunities for Improvement");
@@ -403,61 +395,16 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     }
     y += 4;
 
-    const cols2 = [24, 80, 76, 22];
-    const col2X: number[] = [];
-    let x2 = MARGIN;
-    for (const w of cols2) {
-      col2X.push(x2);
-      x2 += w;
-    }
-    const headers2 = ["NCR #", "Corrective Action", "Preventive Action", "Deadline"];
-    const h2 = capNcs.map((nc) => {
-      const cellLines = [
-        wrap(doc, nc.ncrNumber || "—", cols2[0] - 4),
-        wrap(doc, nc.correctiveAction || "—", cols2[1] - 4),
-        wrap(doc, nc.preventiveAction || "—", cols2[2] - 4),
-        wrap(doc, nc.deadline || "—", cols2[3] - 4),
-      ];
-      return Math.max(...cellLines.map((l) => l.length), 1) * 4.2 + 6;
-    });
-
-    const renderRow2 = (cells: string[], h: number, isHead: boolean) => {
-      ensure(h + 4);
-      doc.setFillColor(...(isHead ? HEAD_FILL : ROW_FILL));
-      doc.setDrawColor(...BORDER);
-      doc.rect(MARGIN, y - 1.5, MAX_W, h, "F");
-      doc.setFont("helvetica", isHead ? "bold" : "normal");
-      doc.setFontSize(7.5);
-      for (let c = 0; c < cells.length; c++) {
-        const cellLines = wrap(doc, cells[c] ?? "—", cols2[c] - 4);
-        for (let li = 0; li < cellLines.length; li++) {
-          doc.setTextColor(isHead ? 255 : 40, isHead ? 255 : 40, isHead ? 255 : 55);
-          doc.text(cellLines[li], col2X[c] + 2, y + 4.2 * li + 1.5);
-        }
-      }
-      for (let c = 0; c < cols2.length; c++) {
-        doc.setDrawColor(...BORDER);
-        doc.setLineWidth(0.1);
-        doc.line(col2X[c], y - 1.5, col2X[c], y - 1.5 + h);
-        if (c === cols2.length - 1) {
-          doc.line(col2X[c] + cols2[c], y - 1.5, col2X[c] + cols2[c], y - 1.5 + h);
-        }
-      }
-      doc.setLineWidth(0.2);
-      doc.setDrawColor(...BORDER);
-      doc.line(MARGIN, y - 1.5 + h, PAGE_W - MARGIN, y - 1.5 + h);
-      y += h;
-    };
-
-    renderRow2(headers2, 8, true);
-    capNcs.forEach((nc, i) => {
-      if (PAGE_H - y < h2[i] + 10) {
-        newPage();
-        renderRow2(headers2, 8, true);
-      }
-      renderRow2([nc.ncrNumber, nc.correctiveAction, nc.preventiveAction, nc.deadline], h2[i], false);
-    });
-    y += 5;
+    renderTable(
+      ["NCR #", "Corrective Action", "Preventive Action", "Deadline"],
+      [26, 78, 58, 20],
+      capNcs.map((nc) => [
+        nc.ncrNumber,
+        nc.correctiveAction,
+        nc.preventiveAction,
+        nc.deadline,
+      ]),
+    );
   }
 
   // ---------- SIGN-OFF ----------
