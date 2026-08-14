@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
+import { downloadAuditPlanPdf } from "@/lib/auditPlanPdf";
 
 type AuditEvent = {
   id: string;
@@ -14,6 +15,29 @@ type AuditEvent = {
   end_date: string;
   department_ids: string[];
   created_at: string;
+};
+
+type PlanDoc = {
+  id: string;
+  title: string;
+  objective: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  department_ids: string[];
+  content: Record<string, string> | null;
+  created_at: string | null;
+};
+
+type CalendarItem = {
+  id: string;
+  kind: "event" | "plan";
+  title: string;
+  objective: string | null;
+  start_date: string;
+  end_date: string;
+  department_ids: string[];
+  content: Record<string, string> | null;
+  created_at: string | null;
 };
 
 type Department = {
@@ -80,6 +104,7 @@ function formatRange(start: string, end: string) {
 export default function CalendarPage() {
   const { loading } = useAuth();
   const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [plans, setPlans] = useState<PlanDoc[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
@@ -95,16 +120,41 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [eventsResult, deptsResult] = await Promise.all([
+    const [eventsResult, deptsResult, plansResult] = await Promise.all([
       supabase
         .from("audit_events")
         .select("id, title, objective, start_date, end_date, department_ids, created_at")
         .order("start_date", { ascending: true }),
       supabase.from("departments").select("id, name, branches(name)"),
+      supabase
+        .from("audit_documents")
+        .select("id, title, description, content, start_date, end_date, department_ids, created_at")
+        .eq("category", "plan")
+        .order("start_date", { ascending: true }),
     ]);
 
     if (!eventsResult.error) setEvents(eventsResult.data ?? []);
     if (!deptsResult.error) setDepartments(deptsResult.data ?? []);
+    if (!plansResult.error) {
+      const withDates: PlanDoc[] = (plansResult.data ?? [])
+        .filter(
+          (p) =>
+            p.start_date &&
+            p.end_date &&
+            typeof p.department_ids !== "undefined",
+        )
+        .map((p) => ({
+          id: p.id,
+          title: p.title,
+          objective: p.description ?? null,
+          start_date: p.start_date,
+          end_date: p.end_date,
+          department_ids: p.department_ids ?? [],
+          content: p.content,
+          created_at: p.created_at ?? null,
+        }));
+      setPlans(withDates);
+    }
     setDataLoading(false);
   }, []);
 
@@ -133,6 +183,29 @@ export default function CalendarPage() {
     const map = new Map(departments.map((d) => [d.id, d.name]));
     return (id: string) => map.get(id) ?? "Unknown";
   }, [departments]);
+
+  const deptBranch = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const dept of departments) {
+      const branch = Array.isArray(dept.branches)
+        ? (dept.branches[0]?.name ?? "Other")
+        : (dept.branches?.name ?? "Other");
+      map.set(dept.id, branch);
+    }
+    return map;
+  }, [departments]);
+
+  const branchesForEvent = useCallback(
+    (event: { department_ids: string[] }) => {
+      const set = new Set<string>();
+      for (const id of event.department_ids) {
+        const branch = deptBranch.get(id);
+        if (branch) set.add(branch);
+      }
+      return [...set];
+    },
+    [deptBranch],
+  );
 
   function openCreate(dateKey: string) {
     setEditing(null);
@@ -230,7 +303,7 @@ export default function CalendarPage() {
   }
 
   const eventsByDate = useMemo(() => {
-    const map: Record<string, AuditEvent[]> = {};
+    const map: Record<string, CalendarItem[]> = {};
     for (const event of events) {
       for (const key of rangeInMonth(
         event.start_date,
@@ -238,11 +311,41 @@ export default function CalendarPage() {
         viewYear,
         viewMonth,
       )) {
-        (map[key] ??= []).push(event);
+        (map[key] ??= []).push({
+          id: event.id,
+          kind: "event",
+          title: event.title,
+          objective: event.objective,
+          start_date: event.start_date,
+          end_date: event.end_date,
+          department_ids: event.department_ids,
+          content: null,
+          created_at: event.created_at,
+        });
+      }
+    }
+    for (const plan of plans) {
+      for (const key of rangeInMonth(
+        plan.start_date!,
+        plan.end_date!,
+        viewYear,
+        viewMonth,
+      )) {
+        (map[key] ??= []).push({
+          id: plan.id,
+          kind: "plan",
+          title: plan.title,
+          objective: plan.objective,
+          start_date: plan.start_date!,
+          end_date: plan.end_date!,
+          department_ids: plan.department_ids,
+          content: plan.content,
+          created_at: plan.created_at,
+        });
       }
     }
     return map;
-  }, [events, viewYear, viewMonth]);
+  }, [events, plans, viewYear, viewMonth]);
 
   const firstDay = new Date(viewYear, viewMonth, 1);
   const startOffset = firstDay.getDay();
@@ -259,9 +362,42 @@ export default function CalendarPage() {
 
   const upcoming = useMemo(
     () =>
-      [...events].sort((a, b) => a.start_date.localeCompare(b.start_date)),
-    [events],
+      [
+        ...events.map<CalendarItem>((e) => ({
+          id: e.id,
+          kind: "event",
+          title: e.title,
+          objective: e.objective,
+          start_date: e.start_date,
+          end_date: e.end_date,
+          department_ids: e.department_ids,
+          content: null,
+          created_at: e.created_at,
+        })),
+        ...plans.map<CalendarItem>((p) => ({
+          id: p.id,
+          kind: "plan",
+          title: p.title,
+          objective: p.objective,
+          start_date: p.start_date!,
+          end_date: p.end_date!,
+          department_ids: p.department_ids,
+          content: p.content,
+          created_at: p.created_at,
+        })),
+      ].sort((a, b) => a.start_date.localeCompare(b.start_date)),
+    [events, plans],
   );
+
+  function handlePlanPdf(item: CalendarItem) {
+    downloadAuditPlanPdf({
+      title: item.title,
+      reference: `AUD-${item.id.slice(0, 8)}`,
+      dateRange: formatRange(item.start_date, item.end_date),
+      departments: item.department_ids.map(deptName),
+      content: item.content,
+    });
+  }
 
   const inputClass =
     "w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-300";
@@ -353,20 +489,31 @@ export default function CalendarPage() {
                     <div className="flex flex-col gap-1">
                       {dayEvents.slice(0, 3).map((event) => (
                         <button
-                          key={event.id}
+                          key={`${event.kind}-${event.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openEdit(event);
+                            if (event.kind === "plan") {
+                              handlePlanPdf(event);
+                            } else {
+                              openEdit(event as AuditEvent);
+                            }
                           }}
-                          className="truncate rounded border border-zinc-700 bg-zinc-900 px-1 py-0.5 text-left text-[9px] text-zinc-200 transition-colors hover:border-zinc-400 hover:text-white sm:text-[11px]"
+                          className={`truncate rounded border px-1 py-0.5 text-left text-[9px] transition-colors hover:border-zinc-400 hover:text-white sm:text-[11px] ${
+                            event.kind === "plan"
+                              ? "border-indigo-500/60 bg-indigo-500/15 text-indigo-200"
+                              : "border-zinc-700 bg-zinc-900 text-zinc-200"
+                          }`}
                           title={
                             `${event.title}\n${formatRange(event.start_date, event.end_date)}` +
                             (event.objective ? `\nObjective: ${event.objective}` : "") +
+                            `\nBranches: ${branchesForEvent(event).join(", ") || "—"}` +
                             (event.department_ids.length
                               ? `\nDepartments: ${event.department_ids.map(deptName).join(", ")}`
-                              : "")
+                              : "") +
+                            (event.kind === "plan" ? "\n\nClick to download plan PDF" : "")
                           }
                         >
+                          {event.kind === "plan" ? "Plan: " : ""}
                           {event.title}
                         </button>
                       ))}
@@ -395,14 +542,25 @@ export default function CalendarPage() {
             <div className="flex flex-col gap-3">
               {upcoming.map((event) => (
                 <div
-                  key={event.id}
-                  className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-colors hover:border-zinc-600"
+                  key={`${event.kind}-${event.id}`}
+                  className={`rounded-xl border p-4 transition-colors hover:border-zinc-600 ${
+                    event.kind === "plan"
+                      ? "border-indigo-500/40 bg-indigo-500/[0.06]"
+                      : "border-zinc-800 bg-zinc-950/60"
+                  }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h4 className="text-sm font-semibold text-zinc-100">
-                        {event.title}
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-semibold text-zinc-100">
+                          {event.title}
+                        </h4>
+                        {event.kind === "plan" && (
+                          <span className="rounded border border-indigo-500/50 bg-indigo-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-indigo-300">
+                            Audit Plan
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-0.5 text-xs text-zinc-500">
                         {formatRange(event.start_date, event.end_date)}
                       </p>
@@ -412,6 +570,24 @@ export default function CalendarPage() {
                           {event.objective}
                         </p>
                       )}
+                      {(() => {
+                        const branches = branchesForEvent(event);
+                        return branches.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                              Branch{event.department_ids.length > 1 ? "es" : ""}:
+                            </span>
+                            {branches.map((branch) => (
+                              <span
+                                key={branch}
+                                className="rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 text-[10px] text-zinc-200"
+                              >
+                                {branch}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
                       {event.department_ids.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {event.department_ids.map((id) => (
@@ -426,18 +602,29 @@ export default function CalendarPage() {
                       )}
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      <button
-                        onClick={() => openEdit(event)}
-                        className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(event)}
-                        className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
-                      >
-                        Delete
-                      </button>
+                      {event.kind === "plan" ? (
+                        <button
+                          onClick={() => handlePlanPdf(event)}
+                          className="rounded-lg border border-indigo-500/50 bg-indigo-500/10 px-2.5 py-1.5 text-xs text-indigo-200 transition-colors hover:bg-indigo-500/20"
+                        >
+                          Plan PDF
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => openEdit(event as AuditEvent)}
+                            className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(event as AuditEvent)}
+                            className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

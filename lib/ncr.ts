@@ -6,9 +6,13 @@ export type NcrRecord = {
   description: string | null;
   branch: string | null;
   clause: string | null;
+  guideline: string | null;
   opening_ncs: number | null;
   closing_ncs: number | null;
-  recommendations: string | null;
+  corrective_action: string | null;
+  preventive_action: string | null;
+  root_cause: string | null;
+  consequences: string | null;
   status: string | null;
   hod_name: string | null;
   hod_comments: string | null;
@@ -18,21 +22,44 @@ export type NcrRecord = {
   hr_comments: string | null;
   ceo: string | null;
   ceo_comments: string | null;
+  priority: string | null;
+  reported_to_ceo: boolean | null;
+  pictures: string[] | null;
+  drive_links: string[] | null;
 };
 
-export const FIELDS: { key: string; label: string; type?: "number" }[] = [
+export type Field = {
+  key: string;
+  label: string;
+  type?: "number" | "select";
+  options?: string[];
+};
+
+export const FIELDS: Field[] = [
   { key: "ncr_number", label: "NCR #" },
   { key: "description", label: "Description" },
   { key: "branch", label: "Branch" },
   { key: "clause", label: "Clause" },
   { key: "opening_ncs", label: "Opening NCs", type: "number" },
   { key: "closing_ncs", label: "Closing NCs", type: "number" },
-  { key: "recommendations", label: "Recommendations" },
-  { key: "status", label: "Status" },
-  { key: "branch_manager", label: "Branch Manager" },
+  { key: "corrective_action", label: "Corrective Action" },
+  { key: "preventive_action", label: "Preventive Action" },
+  { key: "root_cause", label: "Root Cause" },
+  { key: "consequences", label: "Consequences" },
+  {
+    key: "priority",
+    label: "Priority",
+    type: "select",
+    options: ["Urgent", "High", "Medium", "Low"],
+  },
   { key: "branch_manager_comments", label: "Comments from Branch Manager" },
-  { key: "ceo", label: "CEO" },
-  { key: "ceo_comments", label: "Comments from CEO" },
+  {
+    key: "reported_to_ceo",
+    label: "Reported to CEO",
+    type: "select",
+    options: ["Yes", "No"],
+  },
+  { key: "status", label: "Status" },
 ];
 
 const HEADER_MAP: Record<string, string> = {
@@ -42,12 +69,14 @@ const HEADER_MAP: Record<string, string> = {
   clause: "clause",
   "opening ncs": "opening_ncs",
   "closing ncs": "closing_ncs",
-  recommendations: "recommendations",
+  "corrective action": "corrective_action",
+  "preventive action": "preventive_action",
+  "root cause": "root_cause",
+  consequences: "consequences",
   status: "status",
-  "branch manager": "branch_manager",
+  priority: "priority",
+  "reported to ceo": "reported_to_ceo",
   "comments from branch manager": "branch_manager_comments",
-  ceo: "ceo",
-  "comments from ceo": "ceo_comments",
 };
 
 const NUMBER_KEYS = new Set(["opening_ncs", "closing_ncs"]);
@@ -66,12 +95,7 @@ export function exportNcrToXlsx(records: NcrRecord[]) {
   XLSX.writeFile(workbook, "ncrs.xlsx");
 }
 
-const DATE_KEYS = new Set([
-  "opening_ncs",
-  "closing_ncs",
-  "branch_manager",
-  "ceo",
-]);
+const DATE_KEYS = new Set(["opening_ncs", "closing_ncs"]);
 
 export function formatExcelDate(value: unknown): string {
   if (value == null || value === "") return "";
@@ -108,6 +132,13 @@ export async function parseNcrFile(file: File): Promise<Partial<NcrRecord>[]> {
       if (NUMBER_KEYS.has(key)) {
         const num = Number(value);
         record[key] = value === "" || Number.isNaN(num) ? null : num;
+      } else if (key === "reported_to_ceo") {
+        const v = String(value).trim().toLowerCase();
+        record[key] = ["yes", "true", "1", "y"].includes(v)
+          ? true
+          : ["no", "false", "0", "n"].includes(v)
+            ? false
+            : null;
       } else {
         record[key] = value === "" ? null : String(value);
       }
