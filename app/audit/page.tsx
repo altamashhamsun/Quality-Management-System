@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
 import AuditorTab from "./AuditorTab";
+import AuditReportTab from "./AuditReportTab";
 
 type AuditDocument = {
   id: string;
@@ -26,6 +27,7 @@ const TABS = [
   { key: "report", label: "Audit Reports", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "capa", label: "Corrective & Preventive Action", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "auditor", label: "Auditor", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
+  { key: "auditReport", label: "Audit Report", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -251,7 +253,7 @@ export default function AuditPage() {
               Manage audit plans, audit reports, and corrective & preventive actions
             </p>
           </div>
-          {activeTab !== "auditor" && (
+          {activeTab !== "auditor" && activeTab !== "auditReport" && (
             <button
               onClick={openCreate}
               className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800"
@@ -276,7 +278,7 @@ export default function AuditPage() {
                 }`}
               >
                 {tab.label}
-                {tab.key !== "auditor" && (
+                {tab.key !== "auditor" && tab.key !== "auditReport" && (
                   <span className="ml-2 rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-500">
                     {count}
                   </span>
@@ -288,6 +290,8 @@ export default function AuditPage() {
 
         {activeTab === "auditor" ? (
           <AuditorTab />
+        ) : activeTab === "auditReport" ? (
+          <AuditReportTab />
         ) : dataLoading ? (
           <p className="text-sm text-zinc-500">Loading...</p>
         ) : activeDocuments.length === 0 ? (
