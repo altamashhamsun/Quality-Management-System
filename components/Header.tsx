@@ -64,7 +64,7 @@ export default function Header({ email }: { email?: string | null }) {
   }
 
   const dropdownClass =
-    "absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)]";
+    "fixed left-1/2 top-20 z-50 w-64 -translate-x-1/2 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)] md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-52 md:translate-x-0";
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 px-4 py-3 sm:px-6">
