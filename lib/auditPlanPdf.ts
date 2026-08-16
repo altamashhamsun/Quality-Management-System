@@ -216,24 +216,15 @@ export function downloadAuditPlanPdf(plan: AuditPlanPdfData) {
     body(text);
   }
 
-  // ---- LEAD AUDITOR ----
+  // ---- AUDITOR ----
   ensure(26);
   y += 6;
-  sectionHeader("8. Lead Auditor");
+  sectionHeader("8. Auditor");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(...INK);
-  doc.text(plan.leadAuditor || "Name of Lead Auditor", MARGIN, y);
-  y += 4.5;
-  doc.setDrawColor(150, 150, 160);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, y, MARGIN + 80, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
-  doc.text("Signature & Date", MARGIN + 30, y + 4);
-  doc.setLineWidth(0.2);
-  y += 12;
+  doc.text(plan.leadAuditor || "Name of Auditor", MARGIN, y);
+  y += 8;
 
   // ---- AUDIT AUTHORITY NOTE ----
   sectionHeader("Audit Authority & Management Note");
