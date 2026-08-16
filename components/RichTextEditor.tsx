@@ -82,7 +82,11 @@ const editorCss = `
   .rte-body h4 { font-size: 1.15em; font-weight: 600; margin: 0.5em 0 0.25em; }
   .rte-body h5 { font-size: 1em; font-weight: 600; margin: 0.5em 0 0.25em; }
   .rte-body p, .rte-body li { margin: 0.25em 0; }
-  .rte-body ul, .rte-body ol { padding-left: 1.6em; margin: 0.25em 0; }
+  .rte-body ul { list-style: disc; list-style-position: outside; padding-left: 1.6em; margin: 0.25em 0; }
+  .rte-body ol { list-style: decimal; list-style-position: outside; padding-left: 1.6em; margin: 0.25em 0; }
+  .rte-body ul ul { list-style: circle; }
+  .rte-body ul ul ul { list-style: square; }
+  .rte-body ol ul { list-style: disc; }
   .tw-check-row { display: flex; gap: 0.5rem; align-items: flex-start; margin: 0.25em 0; }
   .tw-check-row .tw-check { margin-top: 0.35em; }
   .tw-check-row .tw-check-content { flex: 1; }
@@ -198,6 +202,56 @@ export default function RichTextEditor({
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
+  }
+
+  function toggleList(listType: "ul" | "ol") {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const node = sel.anchorNode;
+    const el =
+      node && node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : (node as HTMLElement | null);
+    if (!el) return;
+    const block = el.closest<HTMLElement>("p,div,h1,h2,h3,h4,h5,li,blockquote");
+    if (!block || block === editorRef.current) return;
+
+    const list = block.closest<HTMLElement>("ul,ol");
+    const listTag = list?.tagName.toLowerCase();
+
+    if (list && listTag === listType) {
+      const items = Array.from(list.children).filter(
+        (c) => c.tagName.toLowerCase() === "li",
+      ) as HTMLElement[];
+      const fragment = document.createDocumentFragment();
+      for (const item of items) {
+        const p = document.createElement("p");
+        p.innerHTML = item.innerHTML;
+        fragment.appendChild(p);
+      }
+      list.replaceWith(fragment);
+      const last = fragment.lastChild;
+      if (last) placeCaretAtEnd(last);
+      emit();
+      return;
+    }
+
+    if (list) {
+      const converted = document.createElement(listType);
+      converted.innerHTML = list.innerHTML;
+      list.replaceWith(converted);
+      placeCaretAtEnd(converted);
+      emit();
+      return;
+    }
+
+    const newList = document.createElement(listType);
+    const li = document.createElement("li");
+    li.innerHTML = block.innerHTML;
+    newList.appendChild(li);
+    block.replaceWith(newList);
+    placeCaretAtEnd(newList);
+    emit();
   }
 
   function toggleChecklist() {
@@ -484,10 +538,10 @@ export default function RichTextEditor({
         <button type="button" title="Checklist" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); toggleChecklist(); }}>
           ☑
         </button>
-        <button type="button" title="Bulleted list" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); exec("insertUnorderedList"); }}>
+        <button type="button" title="Bulleted list" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); toggleList("ul"); }}>
           •≡
         </button>
-        <button type="button" title="Numbered list" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); exec("insertOrderedList"); }}>
+        <button type="button" title="Numbered list" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); toggleList("ol"); }}>
           1≡
         </button>
         <button type="button" title="Indent" className={TOOLBAR_BTN} onMouseDown={(e) => { e.preventDefault(); exec("indent"); }}>

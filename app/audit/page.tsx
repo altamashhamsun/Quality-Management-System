@@ -50,6 +50,29 @@ const PLAN_SECTIONS: { key: string; label: string }[] = [
 const emptySections = () =>
   Object.fromEntries(PLAN_SECTIONS.map((s) => [s.key, ""])) as Record<string, string>;
 
+const DRAFT_KEY = "auditPlanDraft";
+
+type PlanDraft = {
+  id: string | null;
+  title: string;
+  description: string;
+  sections: Record<string, string>;
+  startDate: string;
+  endDate: string;
+  department_ids: string[];
+};
+
+function readDraft(): PlanDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PlanDraft;
+  } catch {
+    return null;
+  }
+}
+
 type PlanDepartment = {
   id: string;
   name: string;
@@ -126,6 +149,22 @@ function AuditContent() {
     })();
   }, [loading, load]);
 
+  // Autosave the audit plan form as a local draft so closing the window or
+  // refreshing mid-edit never loses the work. Restored on the next open.
+  useEffect(() => {
+    if (!modalOpen || activeTab !== "plan") return;
+    const draft: PlanDraft = {
+      id: editing?.id ?? null,
+      title,
+      description,
+      sections,
+      startDate,
+      endDate,
+      department_ids: selectedDepts,
+    };
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  }, [modalOpen, activeTab, editing, title, description, sections, startDate, endDate, selectedDepts]);
+
   const activeDocuments = documents.filter((doc) => doc.category === activeTab);
 
   const departmentsByBranch = useMemo(() => {
@@ -165,24 +204,35 @@ function AuditContent() {
 
   function openCreate() {
     setEditing(null);
-    setTitle("");
-    setDescription("");
-    setSections(emptySections());
-    setStartDate("");
-    setEndDate("");
-    setSelectedDepts([]);
+    const draft = readDraft();
+    setTitle(draft?.title ?? "");
+    setDescription(draft?.description ?? "");
+    setSections({ ...emptySections(), ...(draft?.sections ?? {}) });
+    setStartDate(draft?.startDate ?? "");
+    setEndDate(draft?.endDate ?? "");
+    setSelectedDepts(draft?.department_ids ?? []);
     setError(null);
     setModalOpen(true);
   }
 
   function openEdit(doc: AuditDocument) {
     setEditing(doc);
-    setTitle(doc.title);
-    setDescription(doc.description ?? "");
-    setSections({ ...emptySections(), ...(doc.content ?? {}) });
-    setStartDate(doc.start_date ?? "");
-    setEndDate(doc.end_date ?? "");
-    setSelectedDepts(doc.department_ids ?? []);
+    const draft = readDraft();
+    if (draft && draft.id === doc.id) {
+      setTitle(draft.title);
+      setDescription(draft.description);
+      setSections({ ...emptySections(), ...draft.sections });
+      setStartDate(draft.startDate);
+      setEndDate(draft.endDate);
+      setSelectedDepts(draft.department_ids ?? []);
+    } else {
+      setTitle(doc.title);
+      setDescription(doc.description ?? "");
+      setSections({ ...emptySections(), ...(doc.content ?? {}) });
+      setStartDate(doc.start_date ?? "");
+      setEndDate(doc.end_date ?? "");
+      setSelectedDepts(doc.department_ids ?? []);
+    }
     setError(null);
     setModalOpen(true);
   }
@@ -251,6 +301,7 @@ function AuditContent() {
     }
 
     setModalOpen(false);
+    window.localStorage.removeItem(DRAFT_KEY);
     load();
   }
 
