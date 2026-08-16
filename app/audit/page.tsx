@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
+import { downloadAuditPlanPdf } from "@/lib/auditPlanPdf";
 import AuditorTab from "./AuditorTab";
 import AuditReportTab from "./AuditReportTab";
 
@@ -200,6 +201,16 @@ function AuditContent() {
       year: "numeric",
     };
     return `${new Date(doc.start_date + "T00:00:00").toLocaleDateString(undefined, opts)} — ${new Date(doc.end_date + "T00:00:00").toLocaleDateString(undefined, opts)}`;
+  }
+
+  function handlePlanPdf(doc: AuditDocument) {
+    downloadAuditPlanPdf({
+      title: doc.title,
+      reference: `AUD-${doc.id.slice(0, 8).toUpperCase()}`,
+      dateRange: formatDateRange(doc) || "—",
+      departments: (doc.department_ids ?? []).map(deptName),
+      content: doc.content,
+    });
   }
 
   function openCreate() {
@@ -412,6 +423,14 @@ function AuditContent() {
                   {doc.description ?? "\u2014"}
                 </p>
                 <div className="mt-3 flex justify-end gap-2">
+                  {doc.category === "plan" && (
+                    <button
+                      onClick={() => handlePlanPdf(doc)}
+                      className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+                    >
+                      PDF
+                    </button>
+                  )}
                   <button
                     onClick={() => setViewing(doc)}
                     className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
@@ -622,6 +641,14 @@ function AuditContent() {
             </p>
           ))}
         <div className="mt-6 flex justify-end gap-2">
+          {viewing?.category === "plan" && (
+            <button
+              onClick={() => handlePlanPdf(viewing)}
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+            >
+              Download PDF
+            </button>
+          )}
           <button
             onClick={() => {
               setViewing(null);
