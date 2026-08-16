@@ -578,12 +578,6 @@ export default function CalendarPage() {
                       <p className="mt-0.5 text-xs text-zinc-500">
                         {formatRange(event.start_date, event.end_date)}
                       </p>
-                      {event.objective && (
-                        <p className="mt-2 text-xs leading-relaxed text-zinc-300">
-                          <span className="text-zinc-500">Objective: </span>
-                          {event.objective}
-                        </p>
-                      )}
                       {(() => {
                         const branches = branchesForEvent(event);
                         return branches.length > 0 ? (
