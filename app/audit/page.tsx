@@ -127,6 +127,19 @@ function AuditContent() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+  const [leadAuditor, setLeadAuditor] = useState("");
+
+  useEffect(() => {
+    if (loading) return;
+    supabase
+      .from("settings")
+      .select("owner_name")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.owner_name) setLeadAuditor(data.owner_name);
+      });
+  }, [loading]);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -210,6 +223,7 @@ function AuditContent() {
       dateRange: formatDateRange(doc) || "—",
       departments: (doc.department_ids ?? []).map(deptName),
       content: doc.content,
+      leadAuditor,
     });
   }
 
@@ -407,21 +421,6 @@ function AuditContent() {
                       : new Date(doc.created_at).toLocaleDateString()}
                   </span>
                 </div>
-                {doc.category === "plan" && doc.department_ids.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-1">
-                    {doc.department_ids.map((id) => (
-                      <span
-                        key={id}
-                        className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400"
-                      >
-                        {deptName(id)}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <p className="min-h-10 whitespace-pre-line text-xs leading-relaxed text-zinc-400">
-                  {doc.description ?? "\u2014"}
-                </p>
                 <div className="mt-3 flex justify-end gap-2">
                   {doc.category === "plan" && (
                     <button

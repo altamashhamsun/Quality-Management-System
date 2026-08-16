@@ -118,6 +118,7 @@ export default function CalendarPage() {
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [leadAuditor, setLeadAuditor] = useState("");
 
   const load = useCallback(async () => {
     const [eventsResult, deptsResult, plansResult] = await Promise.all([
@@ -164,6 +165,18 @@ export default function CalendarPage() {
       await load();
     })();
   }, [loading, load]);
+
+  useEffect(() => {
+    if (loading) return;
+    supabase
+      .from("settings")
+      .select("owner_name")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.owner_name) setLeadAuditor(data.owner_name);
+      });
+  }, [loading]);
 
   const departmentsByBranch = useMemo(() => {
     const groups: { branch: string; items: Department[] }[] = [];
@@ -396,6 +409,7 @@ export default function CalendarPage() {
       dateRange: formatRange(item.start_date, item.end_date),
       departments: item.department_ids.map(deptName),
       content: item.content,
+      leadAuditor,
     });
   }
 

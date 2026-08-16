@@ -6,6 +6,7 @@ export type AuditPlanPdfData = {
   dateRange: string;
   departments: string[];
   content: Record<string, string> | null;
+  leadAuditor?: string;
 };
 
 export const PLAN_SECTION_KEYS = [
@@ -32,6 +33,7 @@ const MARGIN = 14;
 const PAGE_W = 210;
 const PAGE_H = 297;
 const MAX_W = PAGE_W - MARGIN * 2;
+const BOTTOM = 16;
 
 const DARK: readonly [number, number, number] = [22, 22, 30];
 const ACCENT: readonly [number, number, number] = [200, 30, 40];
@@ -86,7 +88,7 @@ export function downloadAuditPlanPdf(plan: AuditPlanPdfData) {
   };
 
   const ensure = (need: number) => {
-    if (PAGE_H - y < need) newPage();
+    if (PAGE_H - y - BOTTOM < need) newPage();
   };
 
   const sectionHeader = (title: string) => {
@@ -214,50 +216,48 @@ export function downloadAuditPlanPdf(plan: AuditPlanPdfData) {
     body(text);
   }
 
-  // ---- SIGN-OFF ----
-  ensure(42);
+  // ---- LEAD AUDITOR ----
+  ensure(26);
   y += 6;
-  sectionHeader("8. Sign-Off");
-
+  sectionHeader("8. Lead Auditor");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(...INK);
-  doc.text("Prepared By", MARGIN, y);
-  y += 3.5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
-  doc.text("Name, signature & date", MARGIN, y);
-  y += 7;
+  doc.text(plan.leadAuditor || "Name of Lead Auditor", MARGIN, y);
+  y += 4.5;
   doc.setDrawColor(150, 150, 160);
   doc.setLineWidth(0.3);
   doc.line(MARGIN, y, MARGIN + 80, y);
-  doc.line(MARGIN + 90, y, PAGE_W - MARGIN, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
   doc.text("Signature & Date", MARGIN + 30, y + 4);
-  doc.text("Signature & Date", MARGIN + 120, y + 4);
-  y += 15;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...INK);
-  doc.text("Approved By", MARGIN, y);
-  y += 3.5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
-  doc.text("Name, signature & date", MARGIN, y);
-  y += 7;
-  doc.line(MARGIN, y, MARGIN + 80, y);
-  doc.line(MARGIN + 90, y, PAGE_W - MARGIN, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
-  doc.text("Signature & Date", MARGIN + 30, y + 4);
-  doc.text("Signature & Date", MARGIN + 120, y + 4);
   doc.setLineWidth(0.2);
+  y += 12;
+
+  // ---- AUDIT AUTHORITY NOTE ----
+  sectionHeader("Audit Authority & Management Note");
+  const note = [
+    "This operational audit plan has been formally approved by the CEO. Audit inspections across target departments may occur unannounced at any time throughout the designated execution window.",
+    "All preliminary findings and Non-Conformance Reports (NCRs) will be communicated directly to the Branch Manager for immediate operational alignment, and full audit results will be formally reported to the CEO.",
+  ].join("\n\n");
+  const noteLines = wrapLines(doc, note, MAX_W - 12);
+  const boxH = noteLines.length * 4.8 + 12;
+  ensure(boxH + 8);
+  doc.setFillColor(252, 250, 247);
+  doc.setDrawColor(...ACCENT);
+  doc.setLineWidth(0.35);
+  doc.roundedRect(MARGIN, y, MAX_W, boxH, 2, 2, "FD");
+  doc.setLineWidth(0.2);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9.5);
+  doc.setTextColor(60, 60, 70);
+  let ny = y + 8;
+  for (const line of noteLines) {
+    doc.text(line, MARGIN + 6, ny);
+    ny += 4.8;
+  }
+  y += boxH + 8;
 
   // ---- RUNNING HEADER + FOOTER ----
   const total = doc.getNumberOfPages();
