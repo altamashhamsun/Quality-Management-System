@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
@@ -8,6 +9,11 @@ import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
 import AuditorTab from "./AuditorTab";
 import AuditReportTab from "./AuditReportTab";
+
+// The page is driven by query params (tab=auditor, branch, dept) so a
+// specific view can be deep-linked. The content that reads searchParams is
+// wrapped in a Suspense boundary so the route can be statically prerendered
+// (see the useSearchParams docs).
 
 type AuditDocument = {
   id: string;
@@ -57,8 +63,32 @@ function htmlToText(html: string): string {
 }
 
 export default function AuditPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuditContent />
+    </Suspense>
+  );
+}
+
+function AuditContent() {
   const { loading } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabKey>("plan");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const branchParam = searchParams.get("branch");
+  const deptParam = searchParams.get("dept");
+  const [activeTab, setActiveTab] = useState<TabKey>(() =>
+    tabParam === "auditor" ? "auditor" : "plan",
+  );
+  // Follow the voice assistant's tab requests in the URL. Track the full query
+  // string so a fresh request (new nonce) still lands on the auditor tab even
+  // when tab=auditor is already present. This is a render-time adjustment, not
+  // an effect, so manual tab clicks afterwards aren't overridden.
+  const [lastQuery, setLastQuery] = useState(() => searchParams.toString());
+  const query = searchParams.toString();
+  if (query !== lastQuery) {
+    setLastQuery(query);
+    if (tabParam === "auditor") setActiveTab("auditor");
+  }
   const [documents, setDocuments] = useState<AuditDocument[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -288,7 +318,7 @@ export default function AuditPage() {
         </div>
 
         {activeTab === "auditor" ? (
-          <AuditorTab />
+          <AuditorTab branchId={branchParam} deptId={deptParam} />
         ) : activeTab === "auditReport" ? (
           <AuditReportTab />
         ) : dataLoading ? (

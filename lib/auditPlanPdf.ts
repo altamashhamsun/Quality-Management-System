@@ -118,7 +118,7 @@ export function downloadAuditPlanPdf(plan: AuditPlanPdfData) {
   doc.setTextColor(235, 235, 240);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.text("COMPLIANCE IOS", MARGIN, 13);
+  doc.text("QUALITY AND COMPLIANCE IOS", MARGIN, 13);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(170, 170, 180);

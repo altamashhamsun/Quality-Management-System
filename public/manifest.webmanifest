@@ -1,9 +1,9 @@
 {
-  "name": "Compliance IOS",
-  "short_name": "Compliance",
+  "name": "Quality and Compliance IOS",
+  "short_name": "Quality & Compliance",
   "description": "Internal audit and compliance management system",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/branches",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

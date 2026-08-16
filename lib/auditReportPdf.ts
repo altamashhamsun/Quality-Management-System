@@ -13,6 +13,17 @@ export type ReportNc = {
   deadline: string;
 };
 
+export type ReportIncident = {
+  incidentId: string;
+  title: string;
+  incidentType: string;
+  severity: string;
+  branch: string;
+  department: string;
+  occurredAt: string;
+  description: string;
+};
+
 export type AuditReportPdfData = {
   title: string;
   reference: string;
@@ -28,6 +39,7 @@ export type AuditReportPdfData = {
   conformances: string;
   majorNcs: ReportNc[];
   minorNcs: ReportNc[];
+  incidents: ReportIncident[];
   photos: string[];
 };
 
@@ -200,7 +212,7 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
   doc.setTextColor(235, 235, 240);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.text("COMPLIANCE IOS", MARGIN, 13);
+  doc.text("QUALITY AND COMPLIANCE IOS", MARGIN, 13);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(170, 170, 180);
@@ -316,6 +328,24 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     emptyBox("No minor non-conformances recorded.");
   } else {
     renderTable(ncHeaders, ncColumns, ncRows(data.minorNcs));
+  }
+
+  // ---------- UNRESOLVED INCIDENTS ----------
+  sectionHeader("Unresolved Incidents");
+  if (data.incidents.length === 0) {
+    emptyBox("No unresolved incidents on record for the audited branch(es) in this date window.");
+  } else {
+    renderTable(
+      ["Incident ID", "Title", "Type", "Severity", "Branch"],
+      [34, 76, 32, 22, 18],
+      data.incidents.map((i) => [
+        i.incidentId,
+        i.title,
+        i.incidentType,
+        i.severity,
+        i.branch,
+      ]),
+    );
   }
 
   // ---------- OFI ----------

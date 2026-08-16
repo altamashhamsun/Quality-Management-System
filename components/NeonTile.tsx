@@ -29,7 +29,7 @@ export default function NeonTile({
         </div>
         {actions && (
           <div
-            className="flex shrink-0 items-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+            className="flex shrink-0 items-center gap-2 transition-opacity duration-300 sm:opacity-0 sm:group-hover:opacity-100"
             onClick={(e) => e.stopPropagation()}
           >
             {actions}

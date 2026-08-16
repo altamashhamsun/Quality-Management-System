@@ -16,49 +16,24 @@ import {
   formatExcelDate,
   parseNcrFile,
 } from "@/lib/ncr";
+import {
+  daysOverdue,
+  dueSerial,
+  isDone,
+  isResolved,
+} from "@/lib/timeline";
 
 const NUMBER_FIELDS = new Set(["opening_ncs", "closing_ncs"]);
-const PRIORITY_DAYS: Record<string, number> = {
-  Urgent: 2,
-  High: 4,
-  Medium: 7,
-  Low: 10,
-};
 const PRIORITY_OPTIONS = ["Urgent", "High", "Medium", "Low"];
 const STATUS_OPTIONS = ["Action Not Taken Yet", "Action Taken", "Done"];
-const EXCEL_EPOCH_OFFSET = 25569;
 
 const emptyForm = () =>
   Object.fromEntries(FIELDS.map((f) => [f.key, ""])) as Record<string, string>;
 
-function excelSerialToDate(serial: number): Date {
-  return new Date((serial - EXCEL_EPOCH_OFFSET) * 86400000);
-}
-
-function isDone(status: string | null): boolean {
-  return (status ?? "").trim().toLowerCase() === "done";
-}
-
-function dueSerial(record: NcrRecord): number | null {
-  if (record.opening_ncs == null) return null;
-  const days = record.priority ? PRIORITY_DAYS[record.priority] : undefined;
-  if (!days) return null;
-  return record.opening_ncs + days;
-}
-
-function daysOverdue(record: NcrRecord): number {
-  const due = dueSerial(record);
-  if (due == null) return 0;
-  const dueDate = excelSerialToDate(due);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.floor((today.getTime() - dueDate.getTime()) / 86400000);
-}
-
 function needsReminder(record: NcrRecord): boolean {
   if (record.reported_to_ceo || isDone(record.status)) return false;
   if (record.priority === "Urgent" || record.priority === "High") return true;
-  return daysOverdue(record) > 0;
+  return daysOverdue(record.opening_ncs, record.priority) > 0;
 }
 
 function ncrNum(ncr: string | null): number {
@@ -66,7 +41,14 @@ function ncrNum(ncr: string | null): number {
   return m ? parseInt(m[1], 10) : 0;
 }
 
-type Group = { key: string; label: string; serial: number; records: NcrRecord[] };
+type Group = {
+  key: string;
+  label: string;
+  serial: number;
+  records: NcrRecord[];
+  resolved: number;
+  unresolved: number;
+};
 
 function buildGroups(records: NcrRecord[]): Group[] {
   const map = new Map<string, Group>();
@@ -82,15 +64,31 @@ function buildGroups(records: NcrRecord[]): Group[] {
     if (existing) {
       existing.records.push(r);
     } else {
-      map.set(label, { key: label, label, serial, records: [r] });
+      map.set(label, {
+        key: label,
+        label,
+        serial,
+        records: [r],
+        resolved: 0,
+        unresolved: 0,
+      });
     }
   }
   const groups: Group[] = [...map.values()].sort((a, b) => a.serial - b.serial);
   for (const g of groups) {
     g.records.sort((a, b) => ncrNum(a.ncr_number) - ncrNum(b.ncr_number));
+    g.resolved = g.records.filter((r) => isResolved(r.status, r.closing_ncs)).length;
+    g.unresolved = g.records.length - g.resolved;
   }
   if (noDate.length > 0) {
-    groups.push({ key: "No Date", label: "No Date", serial: 0, records: noDate });
+    groups.push({
+      key: "No Date",
+      label: "No Date",
+      serial: 0,
+      records: noDate,
+      resolved: noDate.filter((r) => isResolved(r.status, r.closing_ncs)).length,
+      unresolved: noDate.filter((r) => !isResolved(r.status, r.closing_ncs)).length,
+    });
   }
   return groups;
 }
@@ -174,9 +172,9 @@ function CeoSelect({
 }
 
 function TimelineCell({ record }: { record: NcrRecord }) {
-  const due = dueSerial(record);
+  const due = dueSerial(record.opening_ncs, record.priority);
   if (due == null) return <span className="text-zinc-600">—</span>;
-  const overdue = daysOverdue(record);
+  const overdue = daysOverdue(record.opening_ncs, record.priority);
   if (overdue > 0 && !isDone(record.status)) {
     return (
       <div>
@@ -221,7 +219,7 @@ function PhotosCell({ record }: { record: NcrRecord }) {
     <div className="flex flex-wrap items-center gap-1">
       {urls.map((url, i) => (
         <a key={i} href={url} target="_blank" rel="noreferrer">
-          {/* eslint-disable-next-line @next/next/img-element */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={url}
             alt={`${record.ncr_number ?? "NCR"} photo ${i + 1}`}
@@ -399,6 +397,27 @@ export default function NcrPage() {
     load();
   }
 
+  async function handleDeleteGroup(group: Group) {
+    if (
+      !confirm(
+        `Delete all ${group.records.length} NCR${group.records.length === 1 ? "" : "s"} for ${group.label}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    const ids = group.records.map((r) => r.id);
+    const { error } = await supabase
+      .from("ncr_records")
+      .delete()
+      .in("id", ids);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    load();
+  }
+
   async function handleStatusChange(record: NcrRecord, newStatus: string) {
     const { error } = await supabase
       .from("ncr_records")
@@ -462,7 +481,7 @@ export default function NcrPage() {
   }
 
   function recordToPdfData(record: NcrRecord, photos: string[]) {
-    const due = dueSerial(record);
+    const due = dueSerial(record.opening_ncs, record.priority);
     return {
       ncrNumber: record.ncr_number ?? "NCR",
       branch: record.branch ?? "",
@@ -692,6 +711,18 @@ export default function NcrPage() {
                         {group.records.length} NCR
                         {group.records.length === 1 ? "" : "s"}
                       </span>
+                      <span
+                        className="text-[11px] font-semibold text-emerald-400"
+                        title={`${group.resolved} resolved`}
+                      >
+                        +{group.resolved}
+                      </span>
+                      <span
+                        className="text-[11px] font-semibold text-red-400"
+                        title={`${group.unresolved} unresolved`}
+                      >
+                        -{group.unresolved}
+                      </span>
                     </span>
                     <span className="flex items-center gap-2">
                       <button
@@ -703,6 +734,15 @@ export default function NcrPage() {
                         className={pdfButtonClass}
                       >
                         {pdfBusy === group.key ? "Preparing..." : "PDF"}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteGroup(group);
+                        }}
+                        className="rounded-lg border border-red-500/50 px-2.5 py-1.5 text-xs text-red-400 transition-colors hover:border-red-400 hover:text-red-300"
+                      >
+                        Delete Date
                       </button>
                     </span>
                   </button>

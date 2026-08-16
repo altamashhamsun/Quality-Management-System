@@ -4,6 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
+import { isResolved } from "@/lib/incident";
+
+type IncidentRow = {
+  id: string;
+  status: string | null;
+  branch_name: string | null;
+  department_name: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
 
 type NcrWithDept = {
   id: string;
@@ -55,13 +65,20 @@ function deptBranchName(dept: DeptNode): string {
 export default function PerformancesPage() {
   const { loading } = useAuth();
   const [records, setRecords] = useState<NcrWithDept[]>([]);
+  const [incidents, setIncidents] = useState<IncidentRow[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("ncr_records")
-      .select("id, status, opening_ncs, closing_ncs, departments(name, branches(name))");
-    setRecords(data ?? []);
+    const [recordsResult, incidentsResult] = await Promise.all([
+      supabase
+        .from("ncr_records")
+        .select("id, status, opening_ncs, closing_ncs, departments(name, branches(name))"),
+      supabase
+        .from("incidents")
+        .select("id, status, branch_name, department_name, created_at, resolved_at"),
+    ]);
+    setRecords(recordsResult.data ?? []);
+    setIncidents(incidentsResult.data ?? []);
     setDataLoading(false);
   }, []);
 
@@ -132,6 +149,53 @@ export default function PerformancesPage() {
       else branchStat.unresolved += 1;
     }
 
+    for (const rec of incidents) {
+      const branch = rec.branch_name ?? "Other";
+      const dept = rec.department_name ?? "Unassigned";
+      const deptKey = `${branch}|${dept}`;
+      const resolved = isResolved(rec);
+
+      let deptStat = deptMap.get(deptKey);
+      if (!deptStat) {
+        deptStat = {
+          branch,
+          dept,
+          total: 0,
+          resolved: 0,
+          unresolved: 0,
+          minDays: null,
+          avgDays: null,
+          pct: 0,
+        };
+        deptMap.set(deptKey, deptStat);
+      }
+      deptStat.total += 1;
+      if (resolved) deptStat.resolved += 1;
+      else deptStat.unresolved += 1;
+
+      if (resolved && rec.created_at && rec.resolved_at) {
+        const days = Math.round(
+          (new Date(rec.resolved_at).getTime() - new Date(rec.created_at).getTime()) /
+            86400000,
+        );
+        if (days >= 0) {
+          deptStat.minDays =
+            deptStat.minDays == null ? days : Math.min(deptStat.minDays, days);
+          deptStat.avgDays =
+            deptStat.avgDays == null ? days : (deptStat.avgDays + days) / 2;
+        }
+      }
+
+      let branchStat = branchMap.get(branch);
+      if (!branchStat) {
+        branchStat = { branch, total: 0, resolved: 0, unresolved: 0, pct: 0 };
+        branchMap.set(branch, branchStat);
+      }
+      branchStat.total += 1;
+      if (resolved) branchStat.resolved += 1;
+      else branchStat.unresolved += 1;
+    }
+
     const deptStats = [...deptMap.values()].map((d) => ({
       ...d,
       pct: d.total === 0 ? 0 : Math.round((d.resolved / d.total) * 100),
@@ -146,7 +210,7 @@ export default function PerformancesPage() {
     branchStats.sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
 
     return { deptStats, branchStats };
-  }, [records]);
+  }, [records, incidents]);
 
   const maxDeptResolved = Math.max(1, ...deptStats.map((d) => d.resolved));
   const bestBranch = branchStats[0];

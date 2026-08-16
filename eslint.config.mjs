@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // One-off Node migration script (uses require/dotenv by design).
+    "apply-migration.js",
   ]),
 ]);
 

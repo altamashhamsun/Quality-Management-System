@@ -14,12 +14,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Compliance IOS",
+  title: "Quality and Compliance IOS",
   description: "Internal audit and compliance management system",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Compliance IOS",
+    title: "Quality and Compliance IOS",
     statusBarStyle: "black-translucent",
   },
   formatDetection: {

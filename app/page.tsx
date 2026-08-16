@@ -1,15 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function SignIn() {
   const router = useRouter();
+  const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // If a session already exists (e.g. reopening the PWA), skip the sign-in
+  // form and go straight into the app.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (active && data.session) {
+          router.replace("/branches");
+          return;
+        }
+      } catch {
+        // fall through to the sign-in form
+      }
+      if (active) setChecking(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,12 +50,20 @@ export default function SignIn() {
     router.push("/branches");
   }
 
+  if (checking) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 font-sans dark:bg-black">
+        <p className="text-sm text-zinc-500">Checking session…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-16 font-sans dark:bg-black">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-white/10 dark:bg-zinc-900">
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
-            Compliance IOS
+            Quality and Compliance IOS
           </h1>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
             Sign in to continue
@@ -79,6 +109,25 @@ export default function SignIn() {
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-zinc-200 dark:bg-white/10" />
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">or</span>
+          <div className="h-px flex-1 bg-zinc-200 dark:bg-white/10" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/public/ncrs")}
+          className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:border-zinc-950 hover:text-zinc-950 dark:border-zinc-600 dark:text-zinc-200 dark:hover:border-zinc-300 dark:hover:text-white"
+        >
+          Public View
+        </button>
+        <p className="mt-3 text-center text-xs text-zinc-400 dark:text-zinc-500">
+          Public View is read-only — external visitors can browse NCRs,
+          performances, audit schedules, reports and hazard (HASM) reports
+          without signing in.
+        </p>
       </div>
     </div>
   );

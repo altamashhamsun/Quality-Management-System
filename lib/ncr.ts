@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 
 export type NcrRecord = {
   id: string;
+  department_id: string | null;
   ncr_number: string | null;
   description: string | null;
   branch: string | null;

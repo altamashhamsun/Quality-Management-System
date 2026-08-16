@@ -10,7 +10,7 @@ const MAX_ATTEMPTS_PER_MODEL = 2;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-type AiResult = {
+type AiAnalysis = {
   rephrased: string;
   clause_number: string;
   clause_name: string;
@@ -18,6 +18,11 @@ type AiResult = {
   preventive_action: string;
   root_cause: string;
   consequences: string;
+  standard?: string;
+};
+
+type AiResponse = {
+  analyses: AiAnalysis[];
 };
 
 export async function POST(req: NextRequest) {
@@ -29,36 +34,49 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { issue?: string; department?: string; standard?: string; clause?: string };
+  let body: {
+    issue?: string;
+    department?: string;
+    standard?: string;
+    clause?: string;
+    standards?: string[];
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { issue, department, standard, clause } = body;
-  if (!issue || !department || !standard) {
+  const { issue, department, standard, clause, standards } = body;
+  if (!issue || !department) {
     return NextResponse.json(
-      { error: "Missing required fields: issue, department, standard." },
+      { error: "Missing required fields: issue, department." },
       { status: 400 },
     );
   }
 
+  const applicable =
+    Array.isArray(standards) && standards.length > 0 ? standards : standard ? [standard] : [];
+
   const prompt = [
-    "You are a professional ISO compliance auditor for a hospitality company.",
+    "You are the AI Auditor for a hospitality company.",
     "You will be given a raw issue reported in a department.",
     "Do exactly the following, nothing else:",
-    `1. Rewrite the issue in simple, clear, plain English.`,
-    `2. Identify the most relevant clause NUMBER and clause NAME from the selected standard or guideline that this issue violates.`,
-    `3. Give the simplest, shortest CORRECTIVE ACTION to fix the issue right now.`,
-    `4. Give the simplest, shortest PREVENTIVE ACTION to stop it from happening again.`,
-    `5. State the most likely ROOT CAUSE of the issue in one short sentence.`,
-    `6. State the operational/compliance CONSEQUENCES if left unresolved, in one short sentence.`,
-    "Respond ONLY with a valid JSON object with these exact keys:",
-    '{"rephrased": "...", "clause_number": "...", "clause_name": "...", "corrective_action": "...", "preventive_action": "...", "root_cause": "...", "consequences": "..."}',
+    `1. Rewrite the issue in simple, clear, plain English. Use the SAME rephrased wording for every standard.`,
+    `2. For EACH applicable standard listed below, decide which clause NUMBER and clause NAME of that standard the issue violates.`,
+    `3. For EACH applicable standard, give the simplest, shortest CORRECTIVE ACTION to fix the issue right now.`,
+    `4. For EACH applicable standard, give the simplest, shortest PREVENTIVE ACTION to stop it from happening again.`,
+    `5. For EACH applicable standard, state the most likely ROOT CAUSE in one short sentence.`,
+    `6. For EACH applicable standard, state the operational/compliance CONSEQUENCES if left unresolved, in one short sentence.`,
+    "Respond ONLY with a valid JSON object with this exact shape:",
+    '{"analyses": [{"standard": "...", "clause_number": "...", "clause_name": "...", "rephrased": "...", "corrective_action": "...", "preventive_action": "...", "root_cause": "...", "consequences": "..."}]}',
+    'Provide exactly ONE "analyses" entry per applicable standard. The "standard" key must contain the exact name of that standard (e.g. "ISO 9001:2015").',
     "",
     `Department: ${department}`,
-    `Selected standard/guideline: ${standard}`,
+    applicable.length > 0
+      ? `Applicable standards (one analysis entry required for EACH of these): ${applicable.join("; ")}`
+      : "No specific standard was selected. Provide a single analysis and pick the most appropriate clause yourself.",
+    standard ? `Selected standard: ${standard}` : "",
     clause ? `Reference clause: ${clause}` : "",
     `Reported issue: ${issue}`,
   ].join("\n");
@@ -98,16 +116,29 @@ export async function POST(req: NextRequest) {
             data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ?? "";
 
           const result = parseJson(text);
+          const legacy = result as unknown as Record<string, string | undefined>;
+
+          const analyses = (result?.analyses ?? []).filter(
+            (a) => a.clause_number || a.clause_name || a.rephrased,
+          );
 
           return NextResponse.json({
-            rephrased: result?.rephrased ?? "",
-            clause_number: result?.clause_number ?? "",
-            clause_name: result?.clause_name ?? "",
-            corrective_action: result?.corrective_action ?? "",
-            preventive_action: result?.preventive_action ?? "",
-            root_cause: result?.root_cause ?? "",
-            consequences: result?.consequences ?? "",
-          } satisfies AiResult);
+            analyses:
+              analyses.length > 0
+                ? analyses
+                : [
+                    {
+                      rephrased: legacy.rephrased ?? "",
+                      clause_number: legacy.clause_number ?? "",
+                      clause_name: legacy.clause_name ?? "",
+                      standard: legacy.standard ?? "",
+                      corrective_action: legacy.corrective_action ?? "",
+                      preventive_action: legacy.preventive_action ?? "",
+                      root_cause: legacy.root_cause ?? "",
+                      consequences: legacy.consequences ?? "",
+                    },
+                  ],
+          } satisfies AiResponse);
         }
 
         const errText = await res.text();
@@ -136,12 +167,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function parseJson(text: string): AiResult | null {
+function parseJson(text: string): AiResponse | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return null;
   try {
-    return JSON.parse(text.slice(start, end + 1)) as AiResult;
+    return JSON.parse(text.slice(start, end + 1)) as AiResponse;
   } catch {
     return null;
   }

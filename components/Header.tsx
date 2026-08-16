@@ -9,13 +9,33 @@ const NAV_ITEMS = [
   { label: "Calendar", path: "/calendar" },
   { label: "Audit", path: "/audit" },
   { label: "Performances", path: "/performances" },
+  { label: "CEO Reporting", path: "/ceo-reporting" },
+  { label: "HASM", path: "/hasm" },
+  { label: "Incident Log", path: "/incidents" },
+  { label: "Settings", path: "/settings" },
 ] as const;
 
 export default function Header({ email }: { email?: string | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("settings")
+      .select("owner_name")
+      .eq("id", 1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active && data?.owner_name) setOwnerName(data.owner_name);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -44,17 +64,17 @@ export default function Header({ email }: { email?: string | null }) {
   }
 
   const dropdownClass =
-    "absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)]";
+    "absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)]";
 
   return (
-    <header className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3 sm:px-6">
-      <h1 className="text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl">
-        Compliance IOS
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 px-4 py-3 sm:px-6">
+      <h1 className="min-w-0 text-xl font-bold leading-tight tracking-tight text-zinc-50 sm:text-2xl">
+        Quality and Compliance IOS
       </h1>
 
       <div className="flex items-center gap-3">
         <span className="hidden text-sm text-zinc-500 md:inline">
-          {email}
+          {ownerName || email}
         </span>
         <div className="relative" ref={dropdownRef}>
           <button

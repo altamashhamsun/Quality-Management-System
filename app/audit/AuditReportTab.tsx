@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { NcrRecord } from "@/lib/ncr";
+import { isResolved, severityLabel, type IncidentRecord } from "@/lib/incident";
 import {
   downloadAuditReportPdf,
   type AuditReportPdfData,
+  type ReportIncident,
   type ReportNc,
 } from "@/lib/auditReportPdf";
 
@@ -72,6 +74,7 @@ export default function AuditReportTab() {
   const [plans, setPlans] = useState<PlanDoc[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [records, setRecords] = useState<NcrRecord[]>([]);
+  const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [narrative, setNarrative] = useState<Record<string, string>>(emptyNarrative);
@@ -82,7 +85,7 @@ export default function AuditReportTab() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [plansResult, deptsResult, recordsResult] = await Promise.all([
+    const [plansResult, deptsResult, recordsResult, incidentsResult] = await Promise.all([
       supabase
         .from("audit_documents")
         .select("id, title, start_date, end_date, department_ids")
@@ -90,10 +93,12 @@ export default function AuditReportTab() {
         .order("start_date", { ascending: false }),
       supabase.from("departments").select("id, name, branches(name)"),
       supabase.from("ncr_records").select("*"),
+      supabase.from("incidents").select("*"),
     ]);
     if (!plansResult.error) setPlans(plansResult.data ?? []);
     if (!deptsResult.error) setDepartments(deptsResult.data ?? []);
     if (!recordsResult.error) setRecords(recordsResult.data ?? []);
+    if (!incidentsResult.error) setIncidents(incidentsResult.data ?? []);
     setDataLoading(false);
   }, []);
 
@@ -179,6 +184,44 @@ export default function AuditReportTab() {
   const majorNcs = useMemo(() => ncRows.filter((n, i) => isMajor(scopedRecords[i])), [ncRows, scopedRecords]);
   const minorNcs = useMemo(() => ncRows.filter((n, i) => !isMajor(scopedRecords[i])), [ncRows, scopedRecords]);
 
+  const scopedIncidents = useMemo(() => {
+    if (!selectedPlan || !selectedPlan.start_date || !selectedPlan.end_date) return [];
+    const start = selectedPlan.start_date;
+    const end = selectedPlan.end_date;
+    const auditDate = narrative.audit_date;
+    const branchFilter = new Set<string>();
+    for (const id of selectedPlan.department_ids) {
+      const meta = deptMeta.get(id);
+      if (meta) branchFilter.add(meta.branch);
+    }
+    return incidents.filter((r) => {
+      if (!r.occurred_at || isResolved(r)) return false;
+      const key = dateKey(new Date(r.occurred_at));
+      if (auditDate) {
+        if (key !== auditDate) return false;
+      } else {
+        if (key < start || key > end) return false;
+      }
+      if (branchFilter.size > 0 && !branchFilter.has(r.branch_name ?? "")) return false;
+      return true;
+    });
+  }, [incidents, selectedPlan, deptMeta, narrative.audit_date]);
+
+  const incidentRows: ReportIncident[] = useMemo(
+    () =>
+      scopedIncidents.map((r) => ({
+        incidentId: r.incident_id ?? `INC-${r.id.slice(0, 6).toUpperCase()}`,
+        title: r.title ?? "—",
+        incidentType: r.incident_type ?? "—",
+        severity: severityLabel(r.severity),
+        branch: r.branch_name ?? "—",
+        department: r.department_name ?? "—",
+        occurredAt: r.occurred_at ? dateKey(new Date(r.occurred_at)) : "—",
+        description: r.description ?? "",
+      })),
+    [scopedIncidents],
+  );
+
   const criteria = useMemo(() => {
     const set = new Set<string>();
     for (const r of scopedRecords) {
@@ -229,7 +272,7 @@ export default function AuditReportTab() {
     setError(null);
     setSavedAt(null);
 
-    const summary = `Audit date: ${narrative.audit_date || "—"}, Major NCs: ${majorNcs.length}, Minor NCs: ${minorNcs.length}, Departments: ${planDepartments.map((d) => d.name).join(", ") || "All"}, Criteria: ${criteria.join(", ") || "—"}`;
+    const summary = `Audit date: ${narrative.audit_date || "—"}, Major NCs: ${majorNcs.length}, Minor NCs: ${minorNcs.length}, Unresolved incidents: ${scopedIncidents.length}, Departments: ${planDepartments.map((d) => d.name).join(", ") || "All"}, Criteria: ${criteria.join(", ") || "—"}`;
     const content = {
       reference_id: narrative.reference_id.trim(),
       audit_date: narrative.audit_date.trim(),
@@ -325,6 +368,7 @@ export default function AuditReportTab() {
         conformances: narrative.conformances.trim(),
         majorNcs,
         minorNcs,
+        incidents: incidentRows,
         photos,
       };
       downloadAuditReportPdf(data);
@@ -391,10 +435,11 @@ export default function AuditReportTab() {
             </p>
           ) : (
             <div className="flex flex-col gap-6">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 <StatCard label="NCRs for this audit" value={scopedRecords.length} />
                 <StatCard label="Major NCs" value={majorNcs.length} tone="red" />
                 <StatCard label="Minor NCs" value={minorNcs.length} tone="yellow" />
+                <StatCard label="Unresolved Incidents" value={scopedIncidents.length} tone="red" />
                 <StatCard label="Standards" value={criteria.length} />
               </div>
 
@@ -437,7 +482,7 @@ export default function AuditReportTab() {
                       className={`${inputClass} [color-scheme:dark]`}
                     />
                     <span className="text-[11px] text-zinc-500">
-                      NCRs opened on this date in the plan's branches are the
+                      NCRs opened on this date in the plan&apos;s branches are the
                       records for this audit.
                     </span>
                   </label>
@@ -532,6 +577,43 @@ export default function AuditReportTab() {
               <ReportSection title="Non-Conformances">
                 <NcList title="Major NC" tone="red" ncs={majorNcs} empty="No major non-conformances on this audit date." />
                 <NcList title="Minor NC" tone="yellow" ncs={minorNcs} empty="No minor non-conformances on this audit date." />
+              </ReportSection>
+
+              <ReportSection title="Unresolved Incidents">
+                {incidentRows.length === 0 ? (
+                  <p className="text-sm text-zinc-500">
+                    No unresolved incidents on record for the audited branch(es) in
+                    this date window.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {incidentRows.map((n) => (
+                      <div
+                        key={n.incidentId}
+                        className="rounded-lg border border-red-900/40 bg-zinc-900/40 p-3"
+                      >
+                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-red-300">
+                            {n.incidentId}
+                          </p>
+                          <span className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-300">
+                            {n.severity}
+                          </span>
+                        </div>
+                        <p className="text-xs font-medium text-zinc-200">{n.title}</p>
+                        {n.description && (
+                          <p className="mt-1 text-xs text-zinc-400">{n.description}</p>
+                        )}
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-zinc-500">
+                          <span>Type: {n.incidentType}</span>
+                          <span>Branch: {n.branch}</span>
+                          <span>Dept: {n.department}</span>
+                          <span>Date: {n.occurredAt}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </ReportSection>
 
               <ReportSection title="Opportunities for Improvement">
