@@ -25,6 +25,7 @@ type AuditFinding = {
   root_cause: string | null;
   consequences: string | null;
   standard: string | null;
+  suggestions: AiAnalysis[] | null;
   pictures: string[] | null;
   drive_links: string[] | null;
 };
@@ -160,7 +161,7 @@ function findingToIssue(f: AuditFinding): Issue {
     rootCause: f.root_cause ?? "",
     consequences: f.consequences ?? "",
     standardText: f.standard ?? "",
-    analyses: [],
+    analyses: Array.isArray(f.suggestions) ? f.suggestions : [],
     photos: (f.pictures ?? []).map((url, i) => {
       const storagePath = url.split("/ncr-images/")[1];
       return {
@@ -377,6 +378,7 @@ export default function AuditorTab({
           consequences:
             issue.consequences.trim() === "" ? null : issue.consequences.trim(),
           standard: issueStandard || null,
+          suggestions: issue.analyses.length > 0 ? issue.analyses : null,
           pictures: photos.map((p) => p.storageUrl).filter(Boolean),
           drive_links: photos.map((p) => p.driveUrl).filter(Boolean),
           updated_at: new Date().toISOString(),
