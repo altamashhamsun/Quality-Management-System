@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ThemeSwitcher from "@/components/ThemeSwitcher";
 
 const NAV_ITEMS = [
   { label: "Branches", path: "/branches" },
@@ -65,22 +66,23 @@ export default function Header({ email }: { email?: string | null }) {
   }
 
   const dropdownClass =
-    "fixed left-1/2 top-20 z-50 w-64 -translate-x-1/2 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-[0_0_30px_rgba(0,0,0,0.8)] md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-52 md:translate-x-0";
+    "fixed left-1/2 top-20 z-50 w-64 -translate-x-1/2 overflow-hidden rounded-xl border border-bdr bg-card shadow-lg md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-52 md:translate-x-0";
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 px-4 py-3 sm:px-6">
-      <h1 className="min-w-0 text-xl font-bold leading-tight tracking-tight text-zinc-50 sm:text-2xl">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-bdr px-4 py-3 sm:px-6">
+      <h1 className="min-w-0 text-xl font-bold leading-tight tracking-tight text-txt sm:text-2xl">
         Quality and Compliance IOS
       </h1>
 
-      <div className="flex items-center gap-3">
-        <span className="hidden text-sm text-zinc-500 md:inline">
+      <div className="flex items-center gap-2">
+        <span className="hidden text-sm text-txt-s md:inline">
           {ownerName || email}
         </span>
+        <ThemeSwitcher />
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setOpen((prev) => !prev)}
-            className="flex items-center gap-2 rounded-lg border border-zinc-600 px-3 py-1.5 text-sm font-medium text-zinc-200 transition-colors duration-300 hover:border-zinc-300 hover:text-white"
+            className="flex items-center gap-2 rounded-lg border border-bdr px-3 py-1.5 text-sm font-medium text-txt transition-colors duration-300 hover:border-bdr-h hover:text-txt"
           >
             {currentItem.label}
             <svg
@@ -110,13 +112,13 @@ export default function Header({ email }: { email?: string | null }) {
                     onClick={() => navigate(item.path)}
                     className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                       active
-                        ? "bg-zinc-100 text-zinc-950"
-                        : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                        ? "bg-card-h text-txt"
+                        : "text-txt-s hover:bg-card-h hover:text-txt"
                     }`}
                   >
                     {item.label}
                     {item.label === "Branches" && (
-                      <span className="ml-auto rounded border border-zinc-600 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-zinc-400">
+                      <span className="ml-auto rounded border border-bdr px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-txt-s">
                         Default
                       </span>
                     )}
@@ -128,7 +130,7 @@ export default function Header({ email }: { email?: string | null }) {
         </div>
         <button
           onClick={handleSignOut}
-          className="rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+          className="rounded-lg border border-bdr px-3 py-1.5 text-sm text-txt-s transition-colors hover:border-bdr-h hover:text-txt"
         >
           Sign Out
         </button>

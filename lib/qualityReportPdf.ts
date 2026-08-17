@@ -4,6 +4,7 @@ export type QualityReportPdfData = {
   title: string;
   branchName: string;
   date: string;
+  auditor?: string;
   rounds: Array<{
     roundNumber: number;
     descriptions: Record<string, string>;
@@ -147,6 +148,7 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
     ["Date", data.date || "—"],
     ["Rounds Completed", roundsCompleted > 0 ? `${roundsCompleted}` : "0"],
   ];
+  if (data.auditor) meta.push(["Auditor", data.auditor]);
   const rowH = 8;
   const cardH = meta.length * rowH + 6;
 
