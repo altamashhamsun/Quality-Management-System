@@ -44,6 +44,8 @@ export default function SettingsPage() {
     { name: string; rowCount: number }[] | null
   >(null);
   const [storageLoading, setStorageLoading] = useState(true);
+  const [dbSizeBytes, setDbSizeBytes] = useState<number | null>(null);
+  const FREE_TIER_BYTES = 500 * 1024 * 1024; // 500 MB
 
   useEffect(() => {
     if (loading) return;
@@ -85,15 +87,19 @@ export default function SettingsPage() {
         "quality_areas",
         "settings",
       ];
-      const results = await Promise.all(
-        TABLES.map(async (name) => {
-          const { count } = await supabase
-            .from(name)
-            .select("*", { count: "exact", head: true });
-          return { name, rowCount: count ?? 0 };
-        }),
-      );
-      setStorageInfo(results.filter((t) => t.rowCount > 0));
+      const [tableResults, sizeResult] = await Promise.all([
+        Promise.all(
+          TABLES.map(async (name) => {
+            const { count } = await supabase
+              .from(name)
+              .select("*", { count: "exact", head: true });
+            return { name, rowCount: count ?? 0 };
+          }),
+        ),
+        supabase.rpc("get_database_size"),
+      ]);
+      setStorageInfo(tableResults.filter((t) => t.rowCount > 0));
+      if (sizeResult.data) setDbSizeBytes(Number(sizeResult.data));
       setStorageLoading(false);
     })();
   }, [loading]);
@@ -207,29 +213,63 @@ export default function SettingsPage() {
 
             <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
               <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-                Database Overview
+                Database Usage
               </h3>
               <p className="mb-4 text-xs text-zinc-500">
-                Row counts across all tables.
+                Supabase free tier — 500 MB database
               </p>
               {storageLoading ? (
-                <p className="text-sm text-zinc-500">Loading table stats...</p>
-              ) : !storageInfo || storageInfo.length === 0 ? (
-                <p className="text-sm text-zinc-500">No data found.</p>
+                <p className="text-sm text-zinc-500">Loading stats...</p>
+              ) : dbSizeBytes === null ? (
+                <p className="text-sm text-zinc-500">Could not retrieve database size.</p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {storageInfo.map((t) => (
-                    <div
-                      key={t.name}
-                      className="flex items-center justify-between gap-3 border-b border-zinc-800/70 py-2.5 last:border-b-0"
-                    >
-                      <span className="text-sm text-zinc-200">{t.name}</span>
-                      <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400">
-                        {t.rowCount.toLocaleString()} row{t.rowCount === 1 ? "" : "s"}
-                      </span>
+                <>
+                  {(() => {
+                    const usedMB = dbSizeBytes / (1024 * 1024);
+                    const pct = Math.min(100, (dbSizeBytes / FREE_TIER_BYTES) * 100);
+                    const color =
+                      pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-400" : "bg-emerald-500";
+                    const label =
+                      pct > 80
+                        ? "text-red-400"
+                        : pct > 50
+                          ? "text-yellow-300"
+                          : "text-emerald-400";
+                    return (
+                      <div className="mb-5">
+                        <div className="mb-1.5 flex items-baseline justify-between">
+                          <span className={`text-lg font-semibold ${label}`}>
+                            {usedMB < 1
+                              ? `${(dbSizeBytes / 1024).toFixed(1)} KB`
+                              : `${usedMB.toFixed(2)} MB`}
+                          </span>
+                          <span className="text-xs text-zinc-500">{pct.toFixed(1)}% of 500 MB</span>
+                        </div>
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${color}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {storageInfo && storageInfo.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {storageInfo.map((t) => (
+                        <div
+                          key={t.name}
+                          className="flex items-center justify-between gap-3 border-b border-zinc-800/70 py-2.5 last:border-b-0"
+                        >
+                          <span className="text-sm text-zinc-200">{t.name}</span>
+                          <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400">
+                            {t.rowCount.toLocaleString()} row{t.rowCount === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </section>
 
