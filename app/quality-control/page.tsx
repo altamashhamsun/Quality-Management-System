@@ -828,6 +828,16 @@ export default function QualityControlPage() {
                           Round {s.round_number}
                         </h3>
                         <p className="text-xs text-zinc-500">
+                          {new Date(s.created_at).toLocaleString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </p>
+                        <p className="text-xs text-zinc-500">
                           {s.round_number === 1
                             ? "Item descriptions"
                             : `${(s.checklist ?? []).length} checklist items`}
@@ -858,6 +868,15 @@ export default function QualityControlPage() {
                   Round {selectedSession.round_number}
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
+                  {new Date(selectedSession.created_at).toLocaleString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                  {" \u00b7 "}
                   {isRound1
                     ? "Write descriptions for each area below"
                     : `${resolved} resolved \u00b7 ${unresolved} unresolved`}
