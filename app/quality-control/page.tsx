@@ -527,10 +527,10 @@ export default function QualityControlPage() {
 
   if (authLoading || dataLoading) {
     return (
-      <div className="min-h-full bg-page">
+      <div className="min-h-full bg-[#050507]">
         <Header />
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <p className="py-20 text-center text-sm text-txt-s">
+          <p className="py-20 text-center text-sm text-zinc-500">
             Loading\u2026
           </p>
         </main>
@@ -551,17 +551,17 @@ export default function QualityControlPage() {
   const reportAreas = selectedReport?.items ?? FALLBACK_ITEMS;
 
   return (
-    <div className="min-h-full bg-page font-sans">
+    <div className="min-h-full bg-[#050507] font-sans">
       <Header />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         {view === "list" && (
           <>
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-txt">
+                <h2 className="text-xl font-semibold text-zinc-50">
                   Quality Control
                 </h2>
-                <p className="mt-1 text-sm text-txt-s">
+                <p className="mt-1 text-sm text-zinc-500">
                   Manage quality inspection reports
                 </p>
               </div>
@@ -573,7 +573,7 @@ export default function QualityControlPage() {
                     );
                     setAreasModal(true);
                   }}
-                  className="rounded-lg border border-bdr px-4 py-2 text-sm text-txt-s transition hover:bg-card-h"
+                  className="rounded-lg border border-zinc-800 px-4 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60"
                 >
                   Manage Areas
                 </button>
@@ -584,7 +584,7 @@ export default function QualityControlPage() {
                     );
                     setCreateModal(true);
                   }}
-                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-card-h"
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-900/60"
                 >
                   Create Report
                 </button>
@@ -600,7 +600,7 @@ export default function QualityControlPage() {
                     e.target.value,
                   );
                 }}
-                className="rounded-lg border border-bdr bg-card px-3 py-2 text-sm text-txt-s focus:outline-none focus:ring-1 focus:ring-bdr"
+                className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-700"
               >
                 <option value="">All Branches</option>
                 {branches.map((b) => (
@@ -611,7 +611,7 @@ export default function QualityControlPage() {
               </select>
             </div>
             {filteredReports.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-bdr bg-card px-6 py-12 text-center text-sm text-txt-s">
+              <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No reports yet. Click &quot;Create Report&quot; to
                 begin.
               </p>
@@ -620,23 +620,23 @@ export default function QualityControlPage() {
                 {filteredReports.map((report) => (
                   <div
                     key={report.id}
-                    className="group rounded-xl border border-bdr bg-card p-4 transition-all duration-300 hover:border-bdr hover:bg-card-h/40"
+                    className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-800 hover:bg-zinc-900/40"
                   >
                     <div className="mb-2 flex items-start justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-txt">
+                      <h3 className="text-sm font-semibold text-zinc-50">
                         {report.title}
                       </h3>
                       <span
                         className={`shrink-0 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                           report.status === "active"
                             ? "bg-emerald-950 text-emerald-400"
-                            : "bg-card-h text-txt-s"
+                            : "bg-zinc-900/60 text-zinc-500"
                         }`}
                       >
                         {report.status}
                       </span>
                     </div>
-                    <p className="text-xs text-txt-s">
+                    <p className="text-xs text-zinc-500">
                       {branchName(report.branch_id)} &middot;{" "}
                       {new Date(
                         report.created_at,
@@ -652,7 +652,7 @@ export default function QualityControlPage() {
                           setSelectedReport(report);
                           setView("report");
                         }}
-                        className="rounded-lg border border-bdr px-2.5 py-1.5 text-xs text-txt-s transition hover:bg-card-h"
+                        className="rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-900/60"
                       >
                         Open
                       </button>
@@ -668,10 +668,10 @@ export default function QualityControlPage() {
           <>
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-txt">
+                <h2 className="text-xl font-semibold text-zinc-50">
                   {selectedReport.title}
                 </h2>
-                <p className="mt-1 text-sm text-txt-s">
+                <p className="mt-1 text-sm text-zinc-500">
                   {branchName(selectedReport.branch_id)} &middot;{" "}
                   {new Date(
                     selectedReport.created_at,
@@ -689,14 +689,14 @@ export default function QualityControlPage() {
                     setSelectedReport(null);
                     setSelectedSession(null);
                   }}
-                  className="rounded-lg border border-bdr px-3 py-2 text-sm text-txt-s transition hover:bg-card-h"
+                  className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60"
                 >
                   Back
                 </button>
                 <button
                   onClick={endDay}
                   disabled={sessions.length === 0}
-                  className="rounded-lg border border-bdr px-3 py-2 text-sm text-txt-s transition hover:bg-card-h disabled:opacity-40"
+                  className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60 disabled:opacity-40"
                 >
                   End Day
                 </button>
@@ -709,7 +709,7 @@ export default function QualityControlPage() {
                         ? "Close the active round first"
                         : ""
                     }
-                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-card-h disabled:opacity-40"
+                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-900/60 disabled:opacity-40"
                   >
                     Add Round
                   </button>
@@ -725,7 +725,7 @@ export default function QualityControlPage() {
               </div>
             </div>
             {sessions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-bdr bg-card px-6 py-12 text-center text-sm text-txt-s">
+              <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No rounds yet. Click &quot;Add Round&quot; to begin.
               </p>
             ) : (
@@ -736,16 +736,16 @@ export default function QualityControlPage() {
                     onClick={() => openSession(s)}
                     className={`w-full rounded-xl border p-4 text-left transition-all duration-300 ${
                       s.status === "active"
-                        ? "border-bdr-h bg-card-h hover:border-bdr-h"
-                        : "border-bdr bg-card hover:border-bdr"
+                        ? "border-zinc-700 bg-zinc-900/60 hover:border-zinc-700"
+                        : "border-zinc-800 bg-zinc-950/60 hover:border-zinc-800"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="text-sm font-semibold text-txt">
+                        <h3 className="text-sm font-semibold text-zinc-50">
                           Round {s.round_number}
                         </h3>
-                        <p className="text-xs text-txt-s">
+                        <p className="text-xs text-zinc-500">
                           {s.round_number === 1
                             ? "Item descriptions"
                             : `${(s.checklist ?? []).length} checklist items`}
@@ -755,7 +755,7 @@ export default function QualityControlPage() {
                         className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                           s.status === "active"
                             ? "bg-emerald-950 text-emerald-400"
-                            : "bg-card-h text-txt-s"
+                            : "bg-zinc-900/60 text-zinc-500"
                         }`}
                       >
                         {s.status}
@@ -772,10 +772,10 @@ export default function QualityControlPage() {
           <>
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-txt">
+                <h2 className="text-xl font-semibold text-zinc-50">
                   Round {selectedSession.round_number}
                 </h2>
-                <p className="mt-1 text-sm text-txt-s">
+                <p className="mt-1 text-sm text-zinc-500">
                   {isRound1
                     ? "Write descriptions for each area below"
                     : `${resolved} resolved \u00b7 ${unresolved} unresolved`}
@@ -787,7 +787,7 @@ export default function QualityControlPage() {
                     setView("report");
                     setSelectedSession(null);
                   }}
-                  className="rounded-lg border border-bdr px-3 py-2 text-sm text-txt-s transition hover:bg-card-h"
+                  className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60"
                 >
                   Back
                 </button>
@@ -795,7 +795,7 @@ export default function QualityControlPage() {
                   <button
                     onClick={closeRound}
                     disabled={closingRound}
-                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-card-h disabled:opacity-40"
+                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-900/60 disabled:opacity-40"
                   >
                     {closingRound
                       ? "Generating\u2026"
@@ -809,7 +809,7 @@ export default function QualityControlPage() {
               <div className="space-y-6">
                 {Object.entries(reportAreas).map(([area, areaItems]) => (
                   <div key={area}>
-                    <h3 className="mb-3 text-sm font-semibold text-txt-s uppercase tracking-wider">
+                    <h3 className="mb-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider">
                       {area}
                     </h3>
                     <div className="space-y-3">
@@ -818,9 +818,9 @@ export default function QualityControlPage() {
                         return (
                           <div
                             key={key}
-                            className="rounded-xl border border-bdr bg-card p-4"
+                            className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
                           >
-                            <label className="mb-2 block text-sm font-medium text-txt-s">
+                            <label className="mb-2 block text-sm font-medium text-zinc-500">
                               {item}
                             </label>
                             <textarea
@@ -836,7 +836,7 @@ export default function QualityControlPage() {
                               }
                               placeholder="Describe what you observed\u2026"
                               rows={2}
-                              className="w-full rounded-lg border border-bdr bg-card-h px-3 py-2 text-sm text-txt placeholder:text-txt-s focus:border-bdr-h focus:outline-none"
+                              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none"
                             />
                           </div>
                         );
@@ -849,7 +849,7 @@ export default function QualityControlPage() {
 
             {!isRound1 &&
               (activeChecklist.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-bdr bg-card px-6 py-12 text-center text-sm text-txt-s">
+                <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                   No checklist items.
                 </p>
               ) : (
@@ -857,24 +857,24 @@ export default function QualityControlPage() {
                   {activeChecklist.map((item) => (
                     <div
                       key={item.id}
-                      className="rounded-xl border border-bdr bg-card p-4"
+                      className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-sm font-medium text-txt-s">
+                          <h4 className="text-sm font-medium text-zinc-500">
                             {item.item}
                           </h4>
-                          <p className="text-xs text-txt-s">
+                          <p className="text-xs text-zinc-500">
                             {item.question}
                           </p>
-                          <p className="mt-1 text-xs text-txt-s">
+                          <p className="mt-1 text-xs text-zinc-500">
                             Found: {item.found_issue}
                           </p>
                         </div>
                         {!isClosed && (
                           <div className="flex shrink-0 items-center gap-2">
                             {savingAnswer === item.id && (
-                              <span className="text-[10px] text-txt-s">
+                              <span className="text-[10px] text-zinc-500">
                                 saving...
                               </span>
                             )}
@@ -886,7 +886,7 @@ export default function QualityControlPage() {
                                 className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                                   item.answer === true
                                     ? "bg-emerald-600 text-white"
-                                    : "border border-bdr text-txt-s hover:bg-card-h"
+                                    : "border border-zinc-800 text-zinc-500 hover:bg-zinc-900/60"
                                 }`}
                               >
                                 Yes
@@ -898,7 +898,7 @@ export default function QualityControlPage() {
                                 className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                                   item.answer === false
                                     ? "bg-red-600 text-white"
-                                    : "border border-bdr text-txt-s hover:bg-card-h"
+                                    : "border border-zinc-800 text-zinc-500 hover:bg-zinc-900/60"
                                 }`}
                               >
                                 No
@@ -935,13 +935,13 @@ export default function QualityControlPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-txt-s">
+            <label className="mb-1 block text-sm text-zinc-500">
               Branch
             </label>
             <select
               value={createBranchId}
               onChange={(e) => setCreateBranchId(e.target.value)}
-              className="w-full rounded-lg border border-bdr bg-card-h px-3 py-2 text-sm text-txt focus:outline-none focus:ring-1 focus:ring-bdr"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
             >
               <option value="">Select branch</option>
               {branches.map((b) => (
@@ -952,20 +952,20 @@ export default function QualityControlPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-txt-s">
+            <label className="mb-1 block text-sm text-zinc-500">
               Title (optional)
             </label>
             <input
               value={createTitle}
               onChange={(e) => setCreateTitle(e.target.value)}
               placeholder={`Auto: Branch Quality Report \u2014 ${todayStr()}`}
-              className="w-full rounded-lg border border-bdr bg-card-h px-3 py-2 text-sm text-txt placeholder:text-txt-s focus:outline-none focus:ring-1 focus:ring-bdr"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700"
             />
           </div>
           <button
             onClick={createReport}
             disabled={!createBranchId}
-            className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition hover:bg-card-h disabled:opacity-40"
+            className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-900/60 disabled:opacity-40"
           >
             Create
           </button>
@@ -980,13 +980,13 @@ export default function QualityControlPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm text-txt-s">
+            <label className="mb-1 block text-sm text-zinc-500">
               Branch
             </label>
             <select
               value={areasBranchId}
               onChange={(e) => setAreasBranchId(e.target.value)}
-              className="w-full rounded-lg border border-bdr bg-card-h px-3 py-2 text-sm text-txt focus:outline-none focus:ring-1 focus:ring-bdr"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
             >
               <option value="">Select branch</option>
               {branches.map((b) => (
@@ -1000,7 +1000,7 @@ export default function QualityControlPage() {
           {areasBranchId && (
             <>
               {areasLoading ? (
-                <p className="py-4 text-center text-sm text-txt-s">
+                <p className="py-4 text-center text-sm text-zinc-500">
                   Loading...
                 </p>
               ) : (
@@ -1008,7 +1008,7 @@ export default function QualityControlPage() {
                   {areas.map((area) => (
                     <div
                       key={area.id}
-                      className="rounded-xl border border-bdr bg-card-h p-4"
+                      className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
                     >
                       <div className="mb-3 flex items-center gap-2">
                         <input
@@ -1016,7 +1016,7 @@ export default function QualityControlPage() {
                           onChange={(e) =>
                             updateAreaName(area.id, e.target.value)
                           }
-                          className="flex-1 rounded-lg border border-bdr bg-card px-3 py-1.5 text-sm font-medium text-txt focus:outline-none focus:ring-1 focus:ring-bdr"
+                          className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5 text-sm font-medium text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
                         />
                         <button
                           onClick={() => deleteArea(area.id)}
@@ -1031,7 +1031,7 @@ export default function QualityControlPage() {
                             key={idx}
                             className="flex items-center gap-2"
                           >
-                            <span className="w-5 text-center text-[10px] text-txt-s">
+                            <span className="w-5 text-center text-[10px] text-zinc-500">
                               {idx + 1}
                             </span>
                             <input
@@ -1041,7 +1041,7 @@ export default function QualityControlPage() {
                                 newItems[idx] = e.target.value;
                                 updateAreaItems(area.id, newItems);
                               }}
-                              className="flex-1 rounded-lg border border-bdr bg-card px-3 py-1.5 text-xs text-txt-s focus:outline-none focus:ring-1 focus:ring-bdr"
+                              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5 text-xs text-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-700"
                               placeholder="Item name"
                             />
                             <button
@@ -1051,7 +1051,7 @@ export default function QualityControlPage() {
                                 );
                                 updateAreaItems(area.id, newItems);
                               }}
-                              className="text-xs text-txt-s hover:text-red-400"
+                              className="text-xs text-zinc-500 hover:text-red-400"
                             >
                               x
                             </button>
@@ -1064,7 +1064,7 @@ export default function QualityControlPage() {
                               "",
                             ])
                           }
-                          className="text-xs text-txt-s hover:text-txt-s"
+                          className="text-xs text-zinc-500 hover:text-zinc-500"
                         >
                           + Add item
                         </button>
@@ -1073,7 +1073,7 @@ export default function QualityControlPage() {
                   ))}
                   <button
                     onClick={addArea}
-                    className="w-full rounded-xl border border-dashed border-bdr py-3 text-sm text-txt-s transition hover:border-bdr-h hover:text-txt-s"
+                    className="w-full rounded-xl border border-dashed border-zinc-800 py-3 text-sm text-zinc-500 transition hover:border-zinc-700 hover:text-zinc-500"
                   >
                     + Add Area
                   </button>

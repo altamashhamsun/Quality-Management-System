@@ -1,66 +1,33 @@
 @import "tailwindcss";
 
-:root, [data-theme="dark"] {
-  --bg-page: #050507;
-  --bg-card: #0f0f13;
-  --bg-card-h: #1a1a20;
-  --text-primary: #e4e4e7;
-  --text-secondary: #71717a;
-  --text-accent: #60a5fa;
-  --border-color: #27272a;
-  --border-hover: #3f3f46;
-}
-
-[data-theme="light"] {
-  --bg-page: #f8fafc;
-  --bg-card: #ffffff;
-  --bg-card-h: #f1f5f9;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-accent: #3b82f6;
-  --border-color: #e2e8f0;
-  --border-hover: #cbd5e1;
-}
-
-[data-theme="navy"] {
-  --bg-page: #0b1929;
-  --bg-card: #112240;
-  --bg-card-h: #1a3355;
-  --text-primary: #c0d8ff;
-  --text-secondary: #7eb8ff;
-  --text-accent: #7eb8ff;
-  --border-color: #1e3a5f;
-  --border-hover: #2a5298;
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-page: var(--bg-page);
-  --color-card: var(--bg-card);
-  --color-card-h: var(--bg-card-h);
-  --color-txt: var(--text-primary);
-  --color-txt-s: var(--text-secondary);
-  --color-acc: var(--text-accent);
-  --color-bdr: var(--border-color);
-  --color-bdr-h: var(--border-hover);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
 body {
-  background: var(--bg-page);
-  color: var(--text-primary);
+  background: #050507;
+  color: #e4e4e7;
   font-family: Arial, Helvetica, sans-serif;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-tap-highlight-color: transparent;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-}
-
-[data-theme="navy"] .shiny-text {
-  text-shadow: 0 0 1px rgba(126, 184, 255, 0.25);
 }
 
 body::after {
