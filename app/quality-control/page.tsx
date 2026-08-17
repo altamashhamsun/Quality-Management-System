@@ -105,6 +105,9 @@ export default function QualityControlPage() {
   const [chartData, setChartData] = useState<
     { round: number; [branch: string]: number | string }[] | null
   >(null);
+  const [branchRankings, setBranchRankings] = useState<
+    { rank: number; name: string; totalIssues: number; resolved: number; unresolved: number; rounds: number; resolvedR1: number; resolutionRate: number }[]
+  >([]);
 
   const [areasModal, setAreasModal] = useState(false);
   const [areasBranchId, setAreasBranchId] = useState("");
@@ -146,15 +149,30 @@ export default function QualityControlPage() {
 
       const branchMap = new Map(branches.map((b) => [b.id, b.name]));
       const branchRoundResolved = new Map<string, Map<number, number>>();
+      const branchRoundUnresolved = new Map<string, Map<number, number>>();
+      const branchTotalResolved = new Map<string, number>();
+      const branchTotalUnresolved = new Map<string, number>();
+      const branchRounds = new Map<string, number>();
+      const branchResolvedR1 = new Map<string, number>();
 
       for (const s of allSessions as { report_id: string; round_number: number; checklist: QCItem[] | null }[]) {
         const report = reports.find((r) => r.id === s.report_id);
         if (!report) continue;
         const branch = branchMap.get(report.branch_id) ?? "Unknown";
         if (!branchRoundResolved.has(branch)) branchRoundResolved.set(branch, new Map());
-        const roundMap = branchRoundResolved.get(branch)!;
+        if (!branchRoundUnresolved.has(branch)) branchRoundUnresolved.set(branch, new Map());
         const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
-        roundMap.set(s.round_number, (roundMap.get(s.round_number) ?? 0) + resolved);
+        const unresolved = (s.checklist ?? []).filter((i) => i.answer === false).length;
+        const rMap = branchRoundResolved.get(branch)!;
+        const uMap = branchRoundUnresolved.get(branch)!;
+        rMap.set(s.round_number, (rMap.get(s.round_number) ?? 0) + resolved);
+        uMap.set(s.round_number, (uMap.get(s.round_number) ?? 0) + unresolved);
+        branchTotalResolved.set(branch, (branchTotalResolved.get(branch) ?? 0) + resolved);
+        branchTotalUnresolved.set(branch, (branchTotalUnresolved.get(branch) ?? 0) + unresolved);
+        branchRounds.set(branch, Math.max(branchRounds.get(branch) ?? 0, s.round_number));
+        if (s.round_number === 1) {
+          branchResolvedR1.set(branch, (branchResolvedR1.get(branch) ?? 0) + resolved);
+        }
       }
 
       const maxRound = Math.max(
@@ -170,6 +188,27 @@ export default function QualityControlPage() {
         data.push(row);
       }
       setChartData(data);
+
+      const rankings = [...branchTotalResolved.entries()].map(([name, resolved]) => {
+        const unresolved = branchTotalUnresolved.get(name) ?? 0;
+        const total = resolved + unresolved;
+        return {
+          rank: 0,
+          name,
+          totalIssues: total,
+          resolved,
+          unresolved,
+          rounds: branchRounds.get(name) ?? 0,
+          resolvedR1: branchResolvedR1.get(name) ?? 0,
+          resolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0,
+        };
+      });
+      rankings.sort((a, b) => {
+        if (b.resolutionRate !== a.resolutionRate) return b.resolutionRate - a.resolutionRate;
+        return a.rounds - b.rounds;
+      });
+      rankings.forEach((r, i) => { r.rank = i + 1; });
+      setBranchRankings(rankings);
     })();
   }, [reports, branches]);
 
@@ -765,6 +804,68 @@ export default function QualityControlPage() {
                 </div>
               );
             })()}
+            {branchRankings.length > 0 && (
+              <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
+                <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                  Branch Rankings
+                </h3>
+                <p className="mb-4 text-xs text-zinc-500">
+                  Ranked by resolution rate and speed of resolution
+                </p>
+                <div className="space-y-3">
+                  {branchRankings.map((br) => (
+                    <div
+                      key={br.name}
+                      className="flex items-center gap-4 rounded-lg border border-zinc-800/50 bg-zinc-900/40 p-4"
+                    >
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-lg font-bold"
+                        style={{
+                          backgroundColor:
+                            br.rank === 1 ? "#16a34a" : br.rank === 2 ? "#2563eb" : br.rank === 3 ? "#d97706" : "#3f3f46",
+                          color: br.rank <= 3 ? "#fff" : "#a1a1aa",
+                        }}
+                      >
+                        {br.rank}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-zinc-100">{br.name}</span>
+                          {br.rank === 1 && (
+                            <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-400">
+                              Best
+                            </span>
+                          )}
+                          {br.rank === branchRankings.length && branchRankings.length > 1 && (
+                            <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-400">
+                              Needs Improvement
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-4 text-xs text-zinc-500">
+                          <span>{br.resolved}/{br.totalIssues} resolved</span>
+                          <span>•</span>
+                          <span>{br.resolutionRate}%</span>
+                          <span>•</span>
+                          <span>{br.rounds} round{br.rounds !== 1 ? "s" : ""}</span>
+                          <span>•</span>
+                          <span>{br.resolvedR1} resolved in R1</span>
+                        </div>
+                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${br.resolutionRate}%`,
+                              backgroundColor:
+                                br.resolutionRate >= 80 ? "#16a34a" : br.resolutionRate >= 50 ? "#d97706" : "#dc2626",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {filteredReports.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No reports yet. Click &quot;Create Report&quot; to
