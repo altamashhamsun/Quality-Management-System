@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import Header from "@/components/Header";
@@ -13,7 +13,7 @@ type QCReport = {
   branch_id: string;
   title: string;
   status: string;
-  items: string[];
+  items: Record<string, string[]>;
   created_at: string;
   closed_at: string | null;
 };
@@ -39,44 +39,37 @@ type DescRow = {
   item_name: string;
   content: string;
 };
+type QCArea = {
+  id: string;
+  branch_id: string;
+  name: string;
+  items: string[];
+  sort_order: number;
+};
 
 const STORAGE_BRANCH = "qcBranchId";
 
-const DEFAULT_ITEMS = [
-  "Front Desk & Reception",
-  "Lobby & Entrance Area",
-  "Guest Room - Bedroom Cleanliness",
-  "Guest Room - Bathroom",
-  "Guest Room - Amenities & Supplies",
-  "Hallways & Corridors",
-  "Elevators",
-  "Stairwells",
-  "Restaurant & Dining Area",
-  "Kitchen & Food Preparation",
-  "Bar & Lounge",
-  "Pool Area & Deck",
-  "Pool Water Quality",
-  "Spa & Wellness Center",
-  "Gym & Fitness Center",
-  "Conference & Meeting Rooms",
-  "Business Center",
-  "Parking Area",
-  "Landscaping & Exterior",
-  "Signage & Wayfinding",
-  "Laundry & Linen Storage",
-  "Store Room & Inventory",
-  "Back Office & Admin Areas",
-  "Loading Dock",
-  "Fire Safety Equipment",
-  "Electrical Panels & Systems",
-  "Plumbing & Water Systems",
-  "HVAC & Air Quality",
-  "Waste Management & Disposal",
-  "Pest Control Measures",
-  "CCTV & Security Systems",
-  "Key & Access Control",
-  "Guest Feedback & Complaints Log",
-];
+const FALLBACK_ITEMS: Record<string, string[]> = {
+  "Front Desk & Reception": ["Reception Area", "Check-in Counter", "Waiting Area"],
+  "Lobby & Entrance": ["Main Entrance", "Lobby Floor", "Seating Area"],
+  "Guest Rooms": ["Bedroom Cleanliness", "Bathroom", "Amenities & Supplies"],
+  "Dining": ["Restaurant Area", "Kitchen", "Bar & Lounge"],
+  "Facilities": ["Pool Area", "Gym", "Spa"],
+  "Back of House": ["Laundry", "Store Room", "Loading Dock"],
+  "Safety & Systems": ["Fire Safety", "Electrical", "HVAC", "CCTV"],
+};
+
+function flattenAreas(items: Record<string, string[]>): string[] {
+  const out: string[] = [];
+  for (const [area, areaItems] of Object.entries(items)) {
+    for (const item of areaItems) out.push(area + " / " + item);
+  }
+  return out;
+}
+
+function areaItemKey(area: string, item: string) {
+  return area + " / " + item;
+}
 
 export default function QualityControlPage() {
   const { loading: authLoading } = useAuth();
@@ -98,6 +91,12 @@ export default function QualityControlPage() {
   const [createModal, setCreateModal] = useState(false);
   const [createBranchId, setCreateBranchId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
+  const [savingAnswer, setSavingAnswer] = useState<string | null>(null);
+
+  const [areasModal, setAreasModal] = useState(false);
+  const [areasBranchId, setAreasBranchId] = useState("");
+  const [areas, setAreas] = useState<QCArea[]>([]);
+  const [areasLoading, setAreasLoading] = useState(false);
 
   const saveTimer = useRef<number | null>(null);
   const descriptionsRef = useRef(descriptions);
@@ -116,7 +115,7 @@ export default function QualityControlPage() {
           .order("created_at", { ascending: false }),
       ]);
       setBranches(b ?? []);
-      setReports((r as QCReport[]) ?? []);
+      setReports((r ?? []) as unknown as QCReport[]);
       const stored = window.localStorage.getItem(STORAGE_BRANCH);
       if (stored) setSelectedBranchId(stored);
       setDataLoading(false);
@@ -150,13 +149,16 @@ export default function QualityControlPage() {
       const map = new Map(
         ((data as DescRow[]) ?? []).map((d) => [d.item_name, d]),
       );
-      const items = selectedReport.items ?? DEFAULT_ITEMS;
+      const items = selectedReport.items ?? FALLBACK_ITEMS;
       const descs: Record<string, { id: string | null; content: string }> = {};
-      for (const item of items) {
-        const found = map.get(item);
-        descs[item] = found
-          ? { id: found.id, content: found.content }
-          : { id: null, content: "" };
+      for (const [area, areaItems] of Object.entries(items)) {
+        for (const item of areaItems) {
+          const key = areaItemKey(area, item);
+          const found = map.get(key);
+          descs[key] = found
+            ? { id: found.id, content: found.content }
+            : { id: null, content: "" };
+        }
       }
       setDescriptions(descs);
     })();
@@ -215,18 +217,92 @@ export default function QualityControlPage() {
     });
   const hasActiveSession = sessions.some((s) => s.status === "active");
 
+  const loadAreas = useCallback(async (branchId: string) => {
+    if (!branchId) { setAreas([]); return; }
+    setAreasLoading(true);
+    const { data } = await supabase
+      .from("quality_areas")
+      .select("*")
+      .eq("branch_id", branchId)
+      .order("sort_order");
+    setAreas(
+      ((data ?? []) as unknown[]).map((a: any) => ({
+        id: a.id,
+        branch_id: a.branch_id,
+        name: a.name,
+        items: Array.isArray(a.items) ? a.items : [],
+        sort_order: a.sort_order ?? 0,
+      })),
+    );
+    setAreasLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (areasModal && areasBranchId) loadAreas(areasBranchId);
+  }, [areasModal, areasBranchId, loadAreas]);
+
+  async function addArea() {
+    if (!areasBranchId) return;
+    const { data } = await supabase
+      .from("quality_areas")
+      .insert({
+        branch_id: areasBranchId,
+        name: "New Area",
+        items: [],
+        sort_order: areas.length,
+      })
+      .select()
+      .single();
+    if (data) {
+      setAreas((p) => [
+        ...p,
+        { id: data.id, branch_id: data.branch_id, name: "New Area", items: [], sort_order: data.sort_order },
+      ]);
+    }
+  }
+
+  async function updateAreaName(id: string, name: string) {
+    setAreas((p) => p.map((a) => (a.id === id ? { ...a, name } : a)));
+    await supabase.from("quality_areas").update({ name }).eq("id", id);
+  }
+
+  async function deleteArea(id: string) {
+    setAreas((p) => p.filter((a) => a.id !== id));
+    await supabase.from("quality_areas").delete().eq("id", id);
+  }
+
+  async function updateAreaItems(id: string, items: string[]) {
+    setAreas((p) => p.map((a) => (a.id === id ? { ...a, items } : a)));
+    await supabase.from("quality_areas").update({ items }).eq("id", id);
+  }
+
   async function createReport() {
     if (!createBranchId) return;
     const title =
       createTitle.trim() ||
       `${branchName(createBranchId)} Quality Report \u2014 ${todayStr()}`;
+    const { data: areaData } = await supabase
+      .from("quality_areas")
+      .select("name, items")
+      .eq("branch_id", createBranchId)
+      .order("sort_order");
+    const items: Record<string, string[]> = {};
+    if (areaData && areaData.length > 0) {
+      for (const a of areaData) {
+        const aItems = Array.isArray(a.items) ? a.items : [];
+        if (aItems.length > 0) items[a.name] = aItems;
+      }
+    }
+    if (Object.keys(items).length === 0) {
+      Object.assign(items, FALLBACK_ITEMS);
+    }
     const { data, error } = await supabase
       .from("quality_reports")
-      .insert({ branch_id: createBranchId, title, items: DEFAULT_ITEMS })
+      .insert({ branch_id: createBranchId, title, items })
       .select()
       .single();
     if (error || !data) return;
-    const report = data as QCReport;
+    const report = data as unknown as QCReport;
     setReports((p) => [report, ...p]);
     setSelectedReport(report);
     setSelectedBranchId(createBranchId);
@@ -250,12 +326,13 @@ export default function QualityControlPage() {
     setSessions((p) => [...p, session]);
     setSelectedSession(session);
     if (roundNumber === 1) {
-      const items = selectedReport.items ?? DEFAULT_ITEMS;
-      const descs: Record<
-        string,
-        { id: string | null; content: string }
-      > = {};
-      for (const item of items) descs[item] = { id: null, content: "" };
+      const items = selectedReport.items ?? FALLBACK_ITEMS;
+      const descs: Record<string, { id: string | null; content: string }> = {};
+      for (const [area, areaItems] of Object.entries(items)) {
+        for (const item of areaItems) {
+          descs[areaItemKey(area, item)] = { id: null, content: "" };
+        }
+      }
       setDescriptions(descs);
     }
     setView("round");
@@ -306,16 +383,11 @@ export default function QualityControlPage() {
         if (!res.ok) throw new Error(result.error || "AI failed");
         await supabase
           .from("quality_sessions")
-          .update({
-            status: "closed",
-            closed_at: new Date().toISOString(),
-          })
+          .update({ status: "closed", closed_at: new Date().toISOString() })
           .eq("id", selectedSession.id);
         setSessions((p) =>
           p.map((s) =>
-            s.id === selectedSession.id
-              ? { ...s, status: "closed" }
-              : s,
+            s.id === selectedSession.id ? { ...s, status: "closed" } : s,
           ),
         );
         if (result.checklist?.length > 0) {
@@ -348,16 +420,11 @@ export default function QualityControlPage() {
         if (!res.ok) throw new Error(result.error || "AI failed");
         await supabase
           .from("quality_sessions")
-          .update({
-            status: "closed",
-            closed_at: new Date().toISOString(),
-          })
+          .update({ status: "closed", closed_at: new Date().toISOString() })
           .eq("id", selectedSession.id);
         setSessions((p) =>
           p.map((s) =>
-            s.id === selectedSession.id
-              ? { ...s, status: "closed" }
-              : s,
+            s.id === selectedSession.id ? { ...s, status: "closed" } : s,
           ),
         );
         if (result.checklist?.length > 0) {
@@ -422,10 +489,7 @@ export default function QualityControlPage() {
     if (!selectedReport) return;
     await supabase
       .from("quality_reports")
-      .update({
-        status: "closed",
-        closed_at: new Date().toISOString(),
-      })
+      .update({ status: "closed", closed_at: new Date().toISOString() })
       .eq("id", selectedReport.id);
     setReports((p) =>
       p.map((r) =>
@@ -437,7 +501,7 @@ export default function QualityControlPage() {
     setSelectedSession(null);
   }
 
-  function answerItem(itemId: string, answer: boolean) {
+  async function answerItem(itemId: string, answer: boolean) {
     if (!selectedSession) return;
     const updated = (selectedSession.checklist ?? []).map((i) =>
       i.id === itemId ? { ...i, answer } : i,
@@ -445,14 +509,14 @@ export default function QualityControlPage() {
     const newSession = { ...selectedSession, checklist: updated };
     setSelectedSession(newSession);
     setSessions((p) =>
-      p.map((s) =>
-        s.id === selectedSession.id ? newSession : s,
-      ),
+      p.map((s) => (s.id === selectedSession.id ? newSession : s)),
     );
-    supabase
+    setSavingAnswer(itemId);
+    await supabase
       .from("quality_sessions")
       .update({ checklist: updated })
       .eq("id", selectedSession.id);
+    setSavingAnswer(null);
   }
 
   if (authLoading || dataLoading) {
@@ -461,7 +525,7 @@ export default function QualityControlPage() {
         <Header />
         <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
           <p className="py-20 text-center text-sm text-zinc-500">
-            Loading…
+            Loading\u2026
           </p>
         </main>
       </div>
@@ -478,6 +542,8 @@ export default function QualityControlPage() {
   const resolved = activeChecklist.filter((i) => i.answer === true).length;
   const unresolved = activeChecklist.filter((i) => i.answer === false).length;
 
+  const reportAreas = selectedReport?.items ?? FALLBACK_ITEMS;
+
   return (
     <div className="min-h-full bg-[#050507] font-sans">
       <Header />
@@ -493,17 +559,30 @@ export default function QualityControlPage() {
                   Manage quality inspection reports
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setCreateBranchId(
-                    selectedBranchId || branches[0]?.id || "",
-                  );
-                  setCreateModal(true);
-                }}
-                className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
-              >
-                Create Report
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setAreasBranchId(
+                      selectedBranchId || branches[0]?.id || "",
+                    );
+                    setAreasModal(true);
+                  }}
+                  className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  Manage Areas
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateBranchId(
+                      selectedBranchId || branches[0]?.id || "",
+                    );
+                    setCreateModal(true);
+                  }}
+                  className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
+                >
+                  Create Report
+                </button>
+              </div>
             </div>
             <div className="mb-4">
               <select
@@ -693,7 +772,7 @@ export default function QualityControlPage() {
                 <p className="mt-1 text-sm text-zinc-500">
                   {isRound1
                     ? "Write descriptions for each area below"
-                    : `${resolved} resolved · ${unresolved} unresolved`}
+                    : `${resolved} resolved \u00b7 ${unresolved} unresolved`}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -712,41 +791,53 @@ export default function QualityControlPage() {
                     disabled={closingRound}
                     className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-40"
                   >
-                    {closingRound ? "Generating…" : "Close Round"}
+                    {closingRound
+                      ? "Generating\u2026"
+                      : "Close Round"}
                   </button>
                 )}
               </div>
             </div>
 
             {isRound1 && (
-              <div className="space-y-3">
-                {(selectedReport?.items ?? DEFAULT_ITEMS).map(
-                  (item) => (
-                    <div
-                      key={item}
-                      className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
-                    >
-                      <label className="mb-2 block text-sm font-medium text-zinc-300">
-                        {item}
-                      </label>
-                      <textarea
-                        value={descriptions[item]?.content ?? ""}
-                        onChange={(e) =>
-                          setDescriptions((prev) => ({
-                            ...prev,
-                            [item]: {
-                              ...prev[item],
-                              content: e.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Describe what you observed…"
-                        rows={2}
-                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
-                      />
+              <div className="space-y-6">
+                {Object.entries(reportAreas).map(([area, areaItems]) => (
+                  <div key={area}>
+                    <h3 className="mb-3 text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                      {area}
+                    </h3>
+                    <div className="space-y-3">
+                      {areaItems.map((item) => {
+                        const key = areaItemKey(area, item);
+                        return (
+                          <div
+                            key={key}
+                            className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                          >
+                            <label className="mb-2 block text-sm font-medium text-zinc-300">
+                              {item}
+                            </label>
+                            <textarea
+                              value={descriptions[key]?.content ?? ""}
+                              onChange={(e) =>
+                                setDescriptions((prev) => ({
+                                  ...prev,
+                                  [key]: {
+                                    ...prev[key],
+                                    content: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="Describe what you observed\u2026"
+                              rows={2}
+                              className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                  ),
-                )}
+                  </div>
+                ))}
               </div>
             )}
 
@@ -775,31 +866,38 @@ export default function QualityControlPage() {
                           </p>
                         </div>
                         {!isClosed && (
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              onClick={() =>
-                                answerItem(item.id, true)
-                              }
-                              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                                item.answer === true
-                                  ? "bg-emerald-600 text-white"
-                                  : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
-                              }`}
-                            >
-                              Yes
-                            </button>
-                            <button
-                              onClick={() =>
-                                answerItem(item.id, false)
-                              }
-                              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                                item.answer === false
-                                  ? "bg-red-600 text-white"
-                                  : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
-                              }`}
-                            >
-                              No
-                            </button>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {savingAnswer === item.id && (
+                              <span className="text-[10px] text-zinc-500">
+                                saving...
+                              </span>
+                            )}
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() =>
+                                  answerItem(item.id, true)
+                                }
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                                  item.answer === true
+                                    ? "bg-emerald-600 text-white"
+                                    : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                                }`}
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={() =>
+                                  answerItem(item.id, false)
+                                }
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                                  item.answer === false
+                                    ? "bg-red-600 text-white"
+                                    : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                                }`}
+                              >
+                                No
+                              </button>
+                            </div>
                           </div>
                         )}
                         {isClosed && item.answer !== undefined && (
@@ -854,7 +952,7 @@ export default function QualityControlPage() {
             <input
               value={createTitle}
               onChange={(e) => setCreateTitle(e.target.value)}
-              placeholder={`Auto: Branch Quality Report — ${todayStr()}`}
+              placeholder={`Auto: Branch Quality Report \u2014 ${todayStr()}`}
               className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700"
             />
           </div>
@@ -865,6 +963,118 @@ export default function QualityControlPage() {
           >
             Create
           </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={areasModal}
+        title="Manage Areas & Items"
+        onClose={() => setAreasModal(false)}
+        wide
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm text-zinc-400">
+              Branch
+            </label>
+            <select
+              value={areasBranchId}
+              onChange={(e) => setAreasBranchId(e.target.value)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+            >
+              <option value="">Select branch</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {areasBranchId && (
+            <>
+              {areasLoading ? (
+                <p className="py-4 text-center text-sm text-zinc-500">
+                  Loading...
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {areas.map((area) => (
+                    <div
+                      key={area.id}
+                      className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"
+                    >
+                      <div className="mb-3 flex items-center gap-2">
+                        <input
+                          value={area.name}
+                          onChange={(e) =>
+                            updateAreaName(area.id, e.target.value)
+                          }
+                          className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm font-medium text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                        />
+                        <button
+                          onClick={() => deleteArea(area.id)}
+                          className="rounded-lg border border-red-900 px-2 py-1.5 text-xs text-red-400 transition hover:bg-red-950"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {area.items.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="w-5 text-center text-[10px] text-zinc-600">
+                              {idx + 1}
+                            </span>
+                            <input
+                              value={item}
+                              onChange={(e) => {
+                                const newItems = [...area.items];
+                                newItems[idx] = e.target.value;
+                                updateAreaItems(area.id, newItems);
+                              }}
+                              className="flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+                              placeholder="Item name"
+                            />
+                            <button
+                              onClick={() => {
+                                const newItems = area.items.filter(
+                                  (_, i) => i !== idx,
+                                );
+                                updateAreaItems(area.id, newItems);
+                              }}
+                              className="text-xs text-zinc-600 hover:text-red-400"
+                            >
+                              x
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() =>
+                            updateAreaItems(area.id, [
+                              ...area.items,
+                              "",
+                            ])
+                          }
+                          className="text-xs text-zinc-500 hover:text-zinc-300"
+                        >
+                          + Add item
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addArea}
+                    className="w-full rounded-xl border border-dashed border-zinc-700 py-3 text-sm text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-300"
+                  >
+                    + Add Area
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </Modal>
     </div>
