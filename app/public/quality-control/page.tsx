@@ -95,6 +95,7 @@ export default function PublicQualityControlPage() {
           year: "numeric",
           hour: "2-digit",
           minute: "2-digit",
+          hour12: true,
         });
         if (session.round_number === 1) {
           const { data } = await supabase
@@ -110,6 +111,7 @@ export default function PublicQualityControlPage() {
               year: "numeric",
               hour: "2-digit",
               minute: "2-digit",
+              hour12: true,
             }),
           };
           rounds.push({ roundNumber: 1, createdAt: roundTime, descriptions: descs });
