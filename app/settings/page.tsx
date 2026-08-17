@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [storageInfo, setStorageInfo] = useState<
-    { name: string; fileCount: number; totalSize: number }[] | null
+    { name: string; rowCount: number }[] | null
   >(null);
   const [storageLoading, setStorageLoading] = useState(true);
 
@@ -72,23 +72,28 @@ export default function SettingsPage() {
   useEffect(() => {
     if (loading) return;
     (async () => {
-      try {
-        const { data: buckets, error } = await supabase.storage.listBuckets();
-        if (error || !buckets) {
-          setStorageLoading(false);
-          return;
-        }
-        const results = await Promise.all(
-          buckets.map(async (bucket) => {
-            const { data: files } = await supabase.storage.from(bucket.name).list("", { limit: 1000 });
-            const totalSize = (files ?? []).reduce((sum, f) => sum + (f.metadata?.size ?? 0), 0);
-            return { name: bucket.name, fileCount: files?.length ?? 0, totalSize };
-          }),
-        );
-        setStorageInfo(results);
-      } catch {
-        // storage not accessible with anon key
-      }
+      const TABLES = [
+        "audit_documents",
+        "branches",
+        "departments",
+        "incidents",
+        "incident_log",
+        "ncr_records",
+        "quality_reports",
+        "quality_sessions",
+        "quality_descriptions",
+        "quality_areas",
+        "settings",
+      ];
+      const results = await Promise.all(
+        TABLES.map(async (name) => {
+          const { count } = await supabase
+            .from(name)
+            .select("*", { count: "exact", head: true });
+          return { name, rowCount: count ?? 0 };
+        }),
+      );
+      setStorageInfo(results.filter((t) => t.rowCount > 0));
       setStorageLoading(false);
     })();
   }, [loading]);
@@ -202,36 +207,25 @@ export default function SettingsPage() {
 
             <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
               <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-                Supabase Storage
+                Database Overview
               </h3>
               <p className="mb-4 text-xs text-zinc-500">
-                Storage buckets and file counts for this project.
+                Row counts across all tables.
               </p>
               {storageLoading ? (
-                <p className="text-sm text-zinc-500">Loading storage info...</p>
+                <p className="text-sm text-zinc-500">Loading table stats...</p>
               ) : !storageInfo || storageInfo.length === 0 ? (
-                <p className="text-sm text-zinc-500">
-                  No storage buckets found or not accessible with current permissions.
-                </p>
+                <p className="text-sm text-zinc-500">No data found.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {storageInfo.map((b) => (
+                  {storageInfo.map((t) => (
                     <div
-                      key={b.name}
+                      key={t.name}
                       className="flex items-center justify-between gap-3 border-b border-zinc-800/70 py-2.5 last:border-b-0"
                     >
-                      <div className="flex flex-col">
-                        <span className="text-sm text-zinc-200">{b.name}</span>
-                        <span className="text-xs text-zinc-500">
-                          {b.fileCount} file{b.fileCount === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <span className="text-xs text-zinc-400">
-                        {b.totalSize > 1048576
-                          ? `${(b.totalSize / 1048576).toFixed(1)} MB`
-                          : b.totalSize > 1024
-                            ? `${(b.totalSize / 1024).toFixed(1)} KB`
-                            : `${b.totalSize} B`}
+                      <span className="text-sm text-zinc-200">{t.name}</span>
+                      <span className="rounded bg-zinc-900 px-2 py-0.5 text-xs text-zinc-400">
+                        {t.rowCount.toLocaleString()} row{t.rowCount === 1 ? "" : "s"}
                       </span>
                     </div>
                   ))}
