@@ -7,7 +7,7 @@ export type QualityReportPdfData = {
   auditor?: string;
   rounds: Array<{
     roundNumber: number;
-    descriptions: Record<string, string>;
+    descriptions: Record<string, { text: string; writtenAt: string }>;
     checklist?: Array<{
       item: string;
       question: string;
@@ -189,8 +189,15 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
           doc.setTextColor(...INK);
           doc.text(itemName, MARGIN, y);
           y += 6;
-          const descText = desc || "No description provided.";
+          const descText = desc.text || "No description provided.";
           body(descText);
+          if (desc.writtenAt) {
+            doc.setFont("helvetica", "italic");
+            doc.setFontSize(8);
+            doc.setTextColor(...MUTED);
+            doc.text(`Last edited: ${desc.writtenAt}`, MARGIN, y);
+            y += 5;
+          }
         }
       }
     } else {

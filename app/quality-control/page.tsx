@@ -453,21 +453,31 @@ export default function QualityControlPage() {
     if (!selectedReport) return;
     const rounds: {
       roundNumber: number;
-      descriptions: Record<string, string>;
+      descriptions: Record<string, { text: string; writtenAt: string }>;
       checklist?: QCItem[];
     }[] = [];
     for (const session of sessions) {
       if (session.round_number === 1) {
         const { data } = await supabase
           .from("quality_descriptions")
-          .select("item_name, content")
+          .select("item_name, content, updated_at")
           .eq("session_id", session.id);
-        const descs: Record<string, string> = {};
+        const descs: Record<string, { text: string; writtenAt: string }> = {};
         for (const d of (data ?? []) as {
           item_name: string;
           content: string;
+          updated_at: string;
         }[])
-          descs[d.item_name] = d.content;
+          descs[d.item_name] = {
+            text: d.content,
+            writtenAt: new Date(d.updated_at).toLocaleString(undefined, {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
         rounds.push({ roundNumber: 1, descriptions: descs });
       } else {
         rounds.push({
