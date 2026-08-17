@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import Header from "@/components/Header";
@@ -92,6 +102,9 @@ export default function QualityControlPage() {
   const [createBranchId, setCreateBranchId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
   const [savingAnswer, setSavingAnswer] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<
+    { round: number; [branch: string]: number | string }[] | null
+  >(null);
 
   const [areasModal, setAreasModal] = useState(false);
   const [areasBranchId, setAreasBranchId] = useState("");
@@ -121,6 +134,44 @@ export default function QualityControlPage() {
       setDataLoading(false);
     })();
   }, [authLoading]);
+
+  useEffect(() => {
+    if (reports.length === 0) return;
+    (async () => {
+      const { data: allSessions } = await supabase
+        .from("quality_sessions")
+        .select("id, report_id, round_number, checklist");
+
+      if (!allSessions) return;
+
+      const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+      const branchRoundResolved = new Map<string, Map<number, number>>();
+
+      for (const s of allSessions as { report_id: string; round_number: number; checklist: QCItem[] | null }[]) {
+        const report = reports.find((r) => r.id === s.report_id);
+        if (!report) continue;
+        const branch = branchMap.get(report.branch_id) ?? "Unknown";
+        if (!branchRoundResolved.has(branch)) branchRoundResolved.set(branch, new Map());
+        const roundMap = branchRoundResolved.get(branch)!;
+        const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
+        roundMap.set(s.round_number, (roundMap.get(s.round_number) ?? 0) + resolved);
+      }
+
+      const maxRound = Math.max(
+        1,
+        ...[...branchRoundResolved.values()].flatMap((m) => [...m.keys()]),
+      );
+      const data: { round: number; [branch: string]: number | string }[] = [];
+      for (let r = 1; r <= maxRound; r++) {
+        const row: { round: number; [branch: string]: number | string } = { round: r };
+        for (const [branch, rounds] of branchRoundResolved) {
+          row[branch] = rounds.get(r) ?? 0;
+        }
+        data.push(row);
+      }
+      setChartData(data);
+    })();
+  }, [reports, branches]);
 
   useEffect(() => {
     if (!selectedReport) return;
@@ -660,6 +711,60 @@ export default function QualityControlPage() {
                 ))}
               </select>
             </div>
+            {chartData && chartData.length > 0 && (() => {
+              const branchNames = Object.keys(chartData[0]).filter((k) => k !== "round");
+              const colors = ["#e11d48", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2"];
+              return (
+                <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
+                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                    Issues Resolved per Round
+                  </h3>
+                  <p className="mb-4 text-xs text-zinc-500">
+                    How many issues each branch resolved in each round
+                  </p>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                      <XAxis
+                        dataKey="round"
+                        tick={{ fill: "#a1a1aa", fontSize: 12 }}
+                        tickFormatter={(v) => `R${v}`}
+                        stroke="#3f3f46"
+                      />
+                      <YAxis
+                        tick={{ fill: "#a1a1aa", fontSize: 12 }}
+                        stroke="#3f3f46"
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#18181b",
+                          border: "1px solid #3f3f46",
+                          borderRadius: 8,
+                          color: "#fafafa",
+                          fontSize: 12,
+                        }}
+                        labelFormatter={(v) => `Round ${v}`}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }}
+                      />
+                      {branchNames.map((name, i) => (
+                        <Line
+                          key={name}
+                          type="monotone"
+                          dataKey={name}
+                          stroke={colors[i % colors.length]}
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
             {filteredReports.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No reports yet. Click &quot;Create Report&quot; to
