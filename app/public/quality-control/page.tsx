@@ -89,6 +89,13 @@ export default function PublicQualityControlPage() {
         .order("round_number");
       const rounds: QualityReportPdfData["rounds"] = [];
       for (const session of (sessData ?? []) as QCSession[]) {
+        const roundTime = new Date(session.created_at).toLocaleString(undefined, {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         if (session.round_number === 1) {
           const { data } = await supabase
             .from("quality_descriptions")
@@ -105,10 +112,11 @@ export default function PublicQualityControlPage() {
               minute: "2-digit",
             }),
           };
-          rounds.push({ roundNumber: 1, descriptions: descs });
+          rounds.push({ roundNumber: 1, createdAt: roundTime, descriptions: descs });
         } else {
           rounds.push({
             roundNumber: session.round_number,
+            createdAt: roundTime,
             descriptions: {},
             checklist: session.checklist ?? [],
           });

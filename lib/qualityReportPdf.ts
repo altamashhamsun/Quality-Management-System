@@ -7,6 +7,7 @@ export type QualityReportPdfData = {
   auditor?: string;
   rounds: Array<{
     roundNumber: number;
+    createdAt?: string;
     descriptions: Record<string, { text: string; writtenAt: string }>;
     checklist?: Array<{
       item: string;
@@ -174,7 +175,10 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
   // ---- ROUNDS ----
   for (const round of data.rounds) {
     const isRound1 = round.roundNumber === 1;
-    sectionHeader(`Round ${round.roundNumber}`);
+    const headerTitle = round.createdAt
+      ? `Round ${round.roundNumber}  —  ${round.createdAt}`
+      : `Round ${round.roundNumber}`;
+    sectionHeader(headerTitle);
 
     if (isRound1) {
       // Round 1: list descriptions per item
