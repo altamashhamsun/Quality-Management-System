@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { label: "Branches", path: "/branches" },
   { label: "Calendar", path: "/calendar" },
   { label: "Audit", path: "/audit" },
+  { label: "Quality Control", path: "/quality-control" },
   { label: "Performances", path: "/performances" },
   { label: "CEO Reporting", path: "/ceo-reporting" },
   { label: "HASM", path: "/hasm" },

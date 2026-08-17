@@ -1,0 +1,872 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import { useAuth } from "@/lib/useAuth";
+import { supabase } from "@/lib/supabase";
+import Header from "@/components/Header";
+import Modal from "@/components/Modal";
+import { downloadQualityReportPdf } from "@/lib/qualityReportPdf";
+
+type Branch = { id: string; name: string };
+type QCReport = {
+  id: string;
+  branch_id: string;
+  title: string;
+  status: string;
+  items: string[];
+  created_at: string;
+  closed_at: string | null;
+};
+type QCSession = {
+  id: string;
+  report_id: string;
+  round_number: number;
+  status: string;
+  checklist: QCItem[] | null;
+  created_at: string;
+  closed_at: string | null;
+};
+type QCItem = {
+  id: string;
+  item: string;
+  question: string;
+  found_issue: string;
+  answer?: boolean;
+};
+type DescRow = {
+  id: string;
+  session_id: string;
+  item_name: string;
+  content: string;
+};
+
+const STORAGE_BRANCH = "qcBranchId";
+
+const DEFAULT_ITEMS = [
+  "Front Desk & Reception",
+  "Lobby & Entrance Area",
+  "Guest Room - Bedroom Cleanliness",
+  "Guest Room - Bathroom",
+  "Guest Room - Amenities & Supplies",
+  "Hallways & Corridors",
+  "Elevators",
+  "Stairwells",
+  "Restaurant & Dining Area",
+  "Kitchen & Food Preparation",
+  "Bar & Lounge",
+  "Pool Area & Deck",
+  "Pool Water Quality",
+  "Spa & Wellness Center",
+  "Gym & Fitness Center",
+  "Conference & Meeting Rooms",
+  "Business Center",
+  "Parking Area",
+  "Landscaping & Exterior",
+  "Signage & Wayfinding",
+  "Laundry & Linen Storage",
+  "Store Room & Inventory",
+  "Back Office & Admin Areas",
+  "Loading Dock",
+  "Fire Safety Equipment",
+  "Electrical Panels & Systems",
+  "Plumbing & Water Systems",
+  "HVAC & Air Quality",
+  "Waste Management & Disposal",
+  "Pest Control Measures",
+  "CCTV & Security Systems",
+  "Key & Access Control",
+  "Guest Feedback & Complaints Log",
+];
+
+export default function QualityControlPage() {
+  const { loading: authLoading } = useAuth();
+
+  const [view, setView] = useState<"list" | "report" | "round">("list");
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const [reports, setReports] = useState<QCReport[]>([]);
+  const [selectedReport, setSelectedReport] = useState<QCReport | null>(null);
+  const [sessions, setSessions] = useState<QCSession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<QCSession | null>(
+    null,
+  );
+  const [descriptions, setDescriptions] = useState<
+    Record<string, { id: string | null; content: string }>
+  >({});
+  const [dataLoading, setDataLoading] = useState(true);
+  const [closingRound, setClosingRound] = useState(false);
+  const [createModal, setCreateModal] = useState(false);
+  const [createBranchId, setCreateBranchId] = useState("");
+  const [createTitle, setCreateTitle] = useState("");
+
+  const saveTimer = useRef<number | null>(null);
+  const descriptionsRef = useRef(descriptions);
+  const sessionRef = useRef(selectedSession);
+  descriptionsRef.current = descriptions;
+  sessionRef.current = selectedSession;
+
+  useEffect(() => {
+    if (authLoading) return;
+    (async () => {
+      const [{ data: b }, { data: r }] = await Promise.all([
+        supabase.from("branches").select("id, name").order("name"),
+        supabase
+          .from("quality_reports")
+          .select("*")
+          .order("created_at", { ascending: false }),
+      ]);
+      setBranches(b ?? []);
+      setReports((r as QCReport[]) ?? []);
+      const stored = window.localStorage.getItem(STORAGE_BRANCH);
+      if (stored) setSelectedBranchId(stored);
+      setDataLoading(false);
+    })();
+  }, [authLoading]);
+
+  useEffect(() => {
+    if (!selectedReport) return;
+    (async () => {
+      const { data } = await supabase
+        .from("quality_sessions")
+        .select("*")
+        .eq("report_id", selectedReport.id)
+        .order("round_number");
+      setSessions((data as QCSession[]) ?? []);
+    })();
+  }, [selectedReport?.id]);
+
+  useEffect(() => {
+    if (
+      !selectedSession ||
+      selectedSession.round_number !== 1 ||
+      !selectedReport
+    )
+      return;
+    (async () => {
+      const { data } = await supabase
+        .from("quality_descriptions")
+        .select("*")
+        .eq("session_id", selectedSession.id);
+      const map = new Map(
+        ((data as DescRow[]) ?? []).map((d) => [d.item_name, d]),
+      );
+      const items = selectedReport.items ?? DEFAULT_ITEMS;
+      const descs: Record<string, { id: string | null; content: string }> = {};
+      for (const item of items) {
+        const found = map.get(item);
+        descs[item] = found
+          ? { id: found.id, content: found.content }
+          : { id: null, content: "" };
+      }
+      setDescriptions(descs);
+    })();
+  }, [selectedSession?.id, selectedReport?.id]);
+
+  useEffect(() => {
+    if (
+      view !== "round" ||
+      !sessionRef.current ||
+      sessionRef.current.round_number !== 1
+    )
+      return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(async () => {
+      const session = sessionRef.current;
+      if (!session) return;
+      const descs = descriptionsRef.current;
+      for (const [itemName, desc] of Object.entries(descs)) {
+        if (!desc.content.trim()) continue;
+        if (desc.id) {
+          await supabase
+            .from("quality_descriptions")
+            .update({ content: desc.content })
+            .eq("id", desc.id);
+        } else {
+          const { data } = await supabase
+            .from("quality_descriptions")
+            .insert({
+              session_id: session.id,
+              item_name: itemName,
+              content: desc.content,
+            })
+            .select("id")
+            .single();
+          if (data) {
+            descriptionsRef.current = {
+              ...descriptionsRef.current,
+              [itemName]: { id: data.id, content: desc.content },
+            };
+          }
+        }
+      }
+    }, 800);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [descriptions, view]);
+
+  const branchName = (id: string) =>
+    branches.find((b) => b.id === id)?.name ?? "\u2014";
+  const todayStr = () =>
+    new Date().toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  const hasActiveSession = sessions.some((s) => s.status === "active");
+
+  async function createReport() {
+    if (!createBranchId) return;
+    const title =
+      createTitle.trim() ||
+      `${branchName(createBranchId)} Quality Report \u2014 ${todayStr()}`;
+    const { data, error } = await supabase
+      .from("quality_reports")
+      .insert({ branch_id: createBranchId, title, items: DEFAULT_ITEMS })
+      .select()
+      .single();
+    if (error || !data) return;
+    const report = data as QCReport;
+    setReports((p) => [report, ...p]);
+    setSelectedReport(report);
+    setSelectedBranchId(createBranchId);
+    window.localStorage.setItem(STORAGE_BRANCH, createBranchId);
+    setSessions([]);
+    setView("report");
+    setCreateModal(false);
+    setCreateTitle("");
+  }
+
+  async function addRound() {
+    if (!selectedReport) return;
+    const roundNumber = sessions.length + 1;
+    const { data, error } = await supabase
+      .from("quality_sessions")
+      .insert({ report_id: selectedReport.id, round_number: roundNumber })
+      .select()
+      .single();
+    if (error || !data) return;
+    const session = data as QCSession;
+    setSessions((p) => [...p, session]);
+    setSelectedSession(session);
+    if (roundNumber === 1) {
+      const items = selectedReport.items ?? DEFAULT_ITEMS;
+      const descs: Record<
+        string,
+        { id: string | null; content: string }
+      > = {};
+      for (const item of items) descs[item] = { id: null, content: "" };
+      setDescriptions(descs);
+    }
+    setView("round");
+  }
+
+  function openSession(s: QCSession) {
+    setSelectedSession(s);
+    setView("round");
+  }
+
+  async function forceSaveDescriptions() {
+    const session = sessionRef.current;
+    if (!session) return;
+    const descs = descriptionsRef.current;
+    for (const [itemName, desc] of Object.entries(descs)) {
+      if (!desc.content.trim()) continue;
+      if (desc.id) {
+        await supabase
+          .from("quality_descriptions")
+          .update({ content: desc.content })
+          .eq("id", desc.id);
+      } else {
+        await supabase.from("quality_descriptions").insert({
+          session_id: session.id,
+          item_name: itemName,
+          content: desc.content,
+        });
+      }
+    }
+  }
+
+  async function closeRound() {
+    if (!selectedSession || !selectedReport) return;
+    setClosingRound(true);
+    try {
+      if (selectedSession.round_number === 1) {
+        await forceSaveDescriptions();
+        const descs: Record<string, string> = {};
+        for (const [k, v] of Object.entries(descriptionsRef.current)) {
+          if (v.content.trim()) descs[k] = v.content.trim();
+        }
+        const res = await fetch("/api/ai/quality-checklist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ round: 1, descriptions: descs }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "AI failed");
+        await supabase
+          .from("quality_sessions")
+          .update({
+            status: "closed",
+            closed_at: new Date().toISOString(),
+          })
+          .eq("id", selectedSession.id);
+        setSessions((p) =>
+          p.map((s) =>
+            s.id === selectedSession.id
+              ? { ...s, status: "closed" }
+              : s,
+          ),
+        );
+        if (result.checklist?.length > 0) {
+          const { data } = await supabase
+            .from("quality_sessions")
+            .insert({
+              report_id: selectedReport.id,
+              round_number: 2,
+              checklist: result.checklist,
+            })
+            .select()
+            .single();
+          if (data) setSessions((p) => [...p, data as QCSession]);
+        }
+      } else {
+        const prev = selectedSession.checklist ?? [];
+        const answers: Record<string, boolean> = {};
+        for (const item of prev)
+          if (item.answer !== undefined) answers[item.id] = item.answer;
+        const res = await fetch("/api/ai/quality-checklist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            round: selectedSession.round_number,
+            previousChecklist: prev,
+            previousAnswers: answers,
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || "AI failed");
+        await supabase
+          .from("quality_sessions")
+          .update({
+            status: "closed",
+            closed_at: new Date().toISOString(),
+          })
+          .eq("id", selectedSession.id);
+        setSessions((p) =>
+          p.map((s) =>
+            s.id === selectedSession.id
+              ? { ...s, status: "closed" }
+              : s,
+          ),
+        );
+        if (result.checklist?.length > 0) {
+          const { data } = await supabase
+            .from("quality_sessions")
+            .insert({
+              report_id: selectedReport.id,
+              round_number: selectedSession.round_number + 1,
+              checklist: result.checklist,
+            })
+            .select()
+            .single();
+          if (data) setSessions((p) => [...p, data as QCSession]);
+        }
+      }
+      setView("report");
+      setSelectedSession(null);
+    } catch (e) {
+      alert(`Error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setClosingRound(false);
+    }
+  }
+
+  async function endDay() {
+    if (!selectedReport) return;
+    const rounds: {
+      roundNumber: number;
+      descriptions: Record<string, string>;
+      checklist?: QCItem[];
+    }[] = [];
+    for (const session of sessions) {
+      if (session.round_number === 1) {
+        const { data } = await supabase
+          .from("quality_descriptions")
+          .select("item_name, content")
+          .eq("session_id", session.id);
+        const descs: Record<string, string> = {};
+        for (const d of (data ?? []) as {
+          item_name: string;
+          content: string;
+        }[])
+          descs[d.item_name] = d.content;
+        rounds.push({ roundNumber: 1, descriptions: descs });
+      } else {
+        rounds.push({
+          roundNumber: session.round_number,
+          descriptions: {},
+          checklist: session.checklist ?? [],
+        });
+      }
+    }
+    downloadQualityReportPdf({
+      title: selectedReport.title,
+      branchName: branchName(selectedReport.branch_id),
+      date: todayStr(),
+      rounds,
+    });
+  }
+
+  async function closeReport() {
+    if (!selectedReport) return;
+    await supabase
+      .from("quality_reports")
+      .update({
+        status: "closed",
+        closed_at: new Date().toISOString(),
+      })
+      .eq("id", selectedReport.id);
+    setReports((p) =>
+      p.map((r) =>
+        r.id === selectedReport.id ? { ...r, status: "closed" } : r,
+      ),
+    );
+    setView("list");
+    setSelectedReport(null);
+    setSelectedSession(null);
+  }
+
+  function answerItem(itemId: string, answer: boolean) {
+    if (!selectedSession) return;
+    const updated = (selectedSession.checklist ?? []).map((i) =>
+      i.id === itemId ? { ...i, answer } : i,
+    );
+    const newSession = { ...selectedSession, checklist: updated };
+    setSelectedSession(newSession);
+    setSessions((p) =>
+      p.map((s) =>
+        s.id === selectedSession.id ? newSession : s,
+      ),
+    );
+    supabase
+      .from("quality_sessions")
+      .update({ checklist: updated })
+      .eq("id", selectedSession.id);
+  }
+
+  if (authLoading || dataLoading) {
+    return (
+      <div className="min-h-full bg-[#050507]">
+        <Header />
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+          <p className="py-20 text-center text-sm text-zinc-500">
+            Loading…
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  const filteredReports = selectedBranchId
+    ? reports.filter((r) => r.branch_id === selectedBranchId)
+    : reports;
+
+  const isRound1 = selectedSession?.round_number === 1;
+  const activeChecklist = selectedSession?.checklist ?? [];
+  const isClosed = selectedSession?.status === "closed";
+  const resolved = activeChecklist.filter((i) => i.answer === true).length;
+  const unresolved = activeChecklist.filter((i) => i.answer === false).length;
+
+  return (
+    <div className="min-h-full bg-[#050507] font-sans">
+      <Header />
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        {view === "list" && (
+          <>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-50">
+                  Quality Control
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Manage quality inspection reports
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setCreateBranchId(
+                    selectedBranchId || branches[0]?.id || "",
+                  );
+                  setCreateModal(true);
+                }}
+                className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200"
+              >
+                Create Report
+              </button>
+            </div>
+            <div className="mb-4">
+              <select
+                value={selectedBranchId}
+                onChange={(e) => {
+                  setSelectedBranchId(e.target.value);
+                  window.localStorage.setItem(
+                    STORAGE_BRANCH,
+                    e.target.value,
+                  );
+                }}
+                className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+              >
+                <option value="">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {filteredReports.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+                No reports yet. Click &quot;Create Report&quot; to
+                begin.
+              </p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {filteredReports.map((report) => (
+                  <div
+                    key={report.id}
+                    className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/40"
+                  >
+                    <div className="mb-2 flex items-start justify-between gap-3">
+                      <h3 className="text-sm font-semibold text-zinc-50">
+                        {report.title}
+                      </h3>
+                      <span
+                        className={`shrink-0 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                          report.status === "active"
+                            ? "bg-emerald-950 text-emerald-400"
+                            : "bg-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {report.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {branchName(report.branch_id)} &middot;{" "}
+                      {new Date(
+                        report.created_at,
+                      ).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </p>
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setSelectedReport(report);
+                          setView("report");
+                        }}
+                        className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-800"
+                      >
+                        Open
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {view === "report" && selectedReport && (
+          <>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-50">
+                  {selectedReport.title}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {branchName(selectedReport.branch_id)} &middot;{" "}
+                  {new Date(
+                    selectedReport.created_at,
+                  ).toLocaleDateString("en-GB", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setView("list");
+                    setSelectedReport(null);
+                    setSelectedSession(null);
+                  }}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  Back
+                </button>
+                <button
+                  onClick={endDay}
+                  disabled={sessions.length === 0}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800 disabled:opacity-40"
+                >
+                  End Day
+                </button>
+                {selectedReport.status === "active" && (
+                  <button
+                    onClick={addRound}
+                    disabled={hasActiveSession}
+                    title={
+                      hasActiveSession
+                        ? "Close the active round first"
+                        : ""
+                    }
+                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-40"
+                  >
+                    Add Round
+                  </button>
+                )}
+                {selectedReport.status === "active" && (
+                  <button
+                    onClick={closeReport}
+                    className="rounded-lg border border-red-800 px-3 py-2 text-sm text-red-400 transition hover:bg-red-950"
+                  >
+                    Close Report
+                  </button>
+                )}
+              </div>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+                No rounds yet. Click &quot;Add Round&quot; to begin.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => openSession(s)}
+                    className={`w-full rounded-xl border p-4 text-left transition-all duration-300 ${
+                      s.status === "active"
+                        ? "border-zinc-600 bg-zinc-900/60 hover:border-zinc-500"
+                        : "border-zinc-800 bg-zinc-950/60 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-zinc-50">
+                          Round {s.round_number}
+                        </h3>
+                        <p className="text-xs text-zinc-500">
+                          {s.round_number === 1
+                            ? "Item descriptions"
+                            : `${(s.checklist ?? []).length} checklist items`}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                          s.status === "active"
+                            ? "bg-emerald-950 text-emerald-400"
+                            : "bg-zinc-800 text-zinc-500"
+                        }`}
+                      >
+                        {s.status}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {view === "round" && selectedSession && (
+          <>
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-50">
+                  Round {selectedSession.round_number}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {isRound1
+                    ? "Write descriptions for each area below"
+                    : `${resolved} resolved · ${unresolved} unresolved`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setView("report");
+                    setSelectedSession(null);
+                  }}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-300 transition hover:bg-zinc-800"
+                >
+                  Back
+                </button>
+                {!isClosed && (
+                  <button
+                    onClick={closeRound}
+                    disabled={closingRound}
+                    className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-40"
+                  >
+                    {closingRound ? "Generating…" : "Close Round"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isRound1 && (
+              <div className="space-y-3">
+                {(selectedReport?.items ?? DEFAULT_ITEMS).map(
+                  (item) => (
+                    <div
+                      key={item}
+                      className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                    >
+                      <label className="mb-2 block text-sm font-medium text-zinc-300">
+                        {item}
+                      </label>
+                      <textarea
+                        value={descriptions[item]?.content ?? ""}
+                        onChange={(e) =>
+                          setDescriptions((prev) => ({
+                            ...prev,
+                            [item]: {
+                              ...prev[item],
+                              content: e.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="Describe what you observed…"
+                        rows={2}
+                        className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+                      />
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+
+            {!isRound1 &&
+              (activeChecklist.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+                  No checklist items.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {activeChecklist.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-medium text-zinc-300">
+                            {item.item}
+                          </h4>
+                          <p className="text-xs text-zinc-500">
+                            {item.question}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-600">
+                            Found: {item.found_issue}
+                          </p>
+                        </div>
+                        {!isClosed && (
+                          <div className="flex shrink-0 gap-1">
+                            <button
+                              onClick={() =>
+                                answerItem(item.id, true)
+                              }
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                                item.answer === true
+                                  ? "bg-emerald-600 text-white"
+                                  : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                              }`}
+                            >
+                              Yes
+                            </button>
+                            <button
+                              onClick={() =>
+                                answerItem(item.id, false)
+                              }
+                              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                                item.answer === false
+                                  ? "bg-red-600 text-white"
+                                  : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                              }`}
+                            >
+                              No
+                            </button>
+                          </div>
+                        )}
+                        {isClosed && item.answer !== undefined && (
+                          <span
+                            className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${
+                              item.answer
+                                ? "bg-emerald-950 text-emerald-400"
+                                : "bg-red-950 text-red-400"
+                            }`}
+                          >
+                            {item.answer
+                              ? "Resolved"
+                              : "Unresolved"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+          </>
+        )}
+      </main>
+
+      <Modal
+        open={createModal}
+        title="Create Quality Report"
+        onClose={() => setCreateModal(false)}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm text-zinc-400">
+              Branch
+            </label>
+            <select
+              value={createBranchId}
+              onChange={(e) => setCreateBranchId(e.target.value)}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+            >
+              <option value="">Select branch</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm text-zinc-400">
+              Title (optional)
+            </label>
+            <input
+              value={createTitle}
+              onChange={(e) => setCreateTitle(e.target.value)}
+              placeholder={`Auto: Branch Quality Report — ${todayStr()}`}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+            />
+          </div>
+          <button
+            onClick={createReport}
+            disabled={!createBranchId}
+            className="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-40"
+          >
+            Create
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
