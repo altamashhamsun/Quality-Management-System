@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { NcrRecord } from "@/lib/ncr";
@@ -83,6 +83,8 @@ export default function AuditReportTab() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   const load = useCallback(async () => {
     const [plansResult, deptsResult, recordsResult, incidentsResult] = await Promise.all([
@@ -238,6 +240,60 @@ export default function AuditReportTab() {
     for (const r of scopedRecords) if (r.branch) set.add(r.branch);
     return [...set];
   }, [planDepartments, scopedRecords]);
+
+  // Autosave the audit report narrative to Supabase so work is never lost.
+  useEffect(() => {
+    if (!selectedPlan || dataLoading) return;
+    const hasContent = Object.entries(narrative).some(
+      ([k, v]) => v.trim() && k !== "reference_id",
+    );
+    if (!hasContent) return;
+
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    setAutosaveStatus("saving");
+
+    autosaveTimer.current = setTimeout(async () => {
+      const summary = `Audit date: ${narrative.audit_date || "—"}, Major NCs: ${majorNcs.length}, Minor NCs: ${minorNcs.length}, Unresolved incidents: ${scopedIncidents.length}, Departments: ${planDepartments.map((d) => d.name).join(", ") || "All"}, Criteria: ${criteria.join(", ") || "—"}`;
+      const content = {
+        reference_id: narrative.reference_id.trim(),
+        audit_date: narrative.audit_date.trim(),
+        auditors: narrative.auditors.trim(),
+        lead_auditees: narrative.lead_auditees.trim(),
+        overall_assessment: narrative.overall_assessment.trim(),
+        key_findings: narrative.key_findings.trim(),
+        scope: narrative.scope.trim(),
+        methodology: narrative.methodology.trim(),
+        conformances: narrative.conformances.trim(),
+      };
+      const payload = {
+        category: "report",
+        title: `${selectedPlan.title} – Audit Report`,
+        description: summary,
+        content,
+        plan_id: selectedPlan.id,
+        start_date: selectedPlan.start_date,
+        end_date: selectedPlan.end_date,
+        department_ids: selectedPlan.department_ids,
+      };
+
+      if (reportId) {
+        await supabase.from("audit_documents").update(payload).eq("id", reportId);
+      } else {
+        const { data } = await supabase
+          .from("audit_documents")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (data) setReportId(data.id);
+      }
+      setAutosaveStatus("saved");
+      setSavedAt(new Date().toLocaleString());
+    }, 800);
+
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+  }, [selectedPlan, dataLoading, narrative, reportId, majorNcs, minorNcs, scopedIncidents, planDepartments, criteria]);
 
   async function loadReportForPlan(planId: string) {
     setError(null);
@@ -762,9 +818,13 @@ export default function AuditReportTab() {
                 >
                   {pdfBusy ? "Preparing..." : "Download PDF"}
                 </button>
-                {savedAt && (
+                {(savedAt || autosaveStatus !== "idle") && (
                   <span className="text-xs text-emerald-400">
-                    Saved at {savedAt}
+                    {autosaveStatus === "saving"
+                      ? "Autosaving..."
+                      : savedAt
+                        ? `Saved at ${savedAt}`
+                        : ""}
                   </span>
                 )}
               </div>

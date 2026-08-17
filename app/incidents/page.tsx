@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
@@ -25,12 +25,9 @@ import {
 } from "@/lib/incident";
 import { downloadIncidentReportPdf } from "@/lib/incidentReportPdf";
 
-const DRAFT_KEY = "__cis_incident_draft_v1__";
-
 type Photo = {
   file: File;
   url: string;
-  draftDataUrl: string;
   driveUrl: string;
   driveLink: string;
 };
@@ -144,57 +141,6 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-/** Downscale a photo into a small JPEG data URL so the autosaved draft fits in localStorage. */
-async function downscaleForDraft(file: File): Promise<string> {
-  const maxDim = 960;
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const ctx = canvas.getContext("2d");
-  if (ctx) ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL("image/jpeg", 0.8);
-}
-
-function dataUrlToFile(dataUrl: string, name: string, type: string): File {
-  const [head, b64] = dataUrl.split(",");
-  const mime = head?.match(/data:(.*?);/)?.[1] ?? (type || "image/jpeg");
-  const bin = atob(b64 ?? "");
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new File([bytes], name, { type: mime });
-}
-
-type DraftPhoto = { name: string; type: string; dataUrl: string };
-type StoredDraft = Draft & { photoData?: DraftPhoto[] };
-
-/** Read the autosaved draft so a closed app can resume mid-form. */
-function readStoredDraft(): StoredDraft | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredDraft;
-    if (!parsed || !parsed.incidentId) return null;
-    return parsed;
-  } catch {
-    // corrupt draft -> ignore it
-    return null;
-  }
-}
-
-function draftPhotos(photos: DraftPhoto[] | undefined): Photo[] {
-  return (photos ?? []).map((p) => ({
-    file: dataUrlToFile(p.dataUrl, p.name, p.type),
-    url: p.dataUrl,
-    draftDataUrl: p.dataUrl,
-    driveUrl: "",
-    driveLink: "",
-  }));
-}
-
 export default function IncidentsPage() {
   const { loading } = useAuth();
   const [records, setRecords] = useState<IncidentRecord[]>([]);
@@ -213,14 +159,11 @@ export default function IncidentsPage() {
   const [aiDone, setAiDone] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [draftRestored, setDraftRestored] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [lightbox, setLightbox] = useState<{
     photos: string[];
     links: string[];
     index: number;
   } | null>(null);
-  const saveTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     const { data, error: err } = await supabase
@@ -244,48 +187,6 @@ export default function IncidentsPage() {
       await load();
     })();
   }, [loading, load]);
-
-  // Restore a previously autosaved draft after hydration (a closed app can
-  // resume mid-form). Runs off the synchronous effect path to avoid cascading
-  // renders and SSR/client mismatches.
-  useEffect(() => {
-    const stored = readStoredDraft();
-    if (!stored) return;
-    const t = window.setTimeout(() => {
-      setDraft(stored);
-      setPhotos(draftPhotos(stored.photoData));
-      setFormOpen(true);
-      setDraftRestored(true);
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, []);
-
-  // Autosave the whole form (including photos) so nothing is lost on close.
-  useEffect(() => {
-    if (!formOpen) return;
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      try {
-        const payload = {
-          ...draft,
-          photoData: photos.map((p) => ({
-            name: p.file.name,
-            type: p.file.type,
-            dataUrl: p.draftDataUrl,
-          })),
-        };
-        localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
-        setLastSavedAt(new Date());
-      } catch {
-        setError(
-          "Draft could not be saved automatically — reduce photo sizes or save the incident now.",
-        );
-      }
-    }, 500);
-    return () => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    };
-  }, [draft, photos, formOpen]);
 
   const setField = (key: keyof Draft, value: string) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -320,17 +221,10 @@ export default function IncidentsPage() {
   }
 
   function clearDraft() {
-    try {
-      localStorage.removeItem(DRAFT_KEY);
-    } catch {
-      // fine without it
-    }
     setDraft(emptyDraft(records.length));
     setPhotos([]);
     setAiCapa(null);
     setAiDone(false);
-    setDraftRestored(false);
-    setLastSavedAt(null);
     setError(null);
     setFormOpen(false);
   }
@@ -341,11 +235,10 @@ export default function IncidentsPage() {
     setError(null);
     for (const file of files) {
       readAsDataUrl(file)
-        .then((url) => downscaleForDraft(file).then((draftDataUrl) => ({ url, draftDataUrl })))
-        .then(({ url, draftDataUrl }) => {
+        .then((url) => {
           setPhotos((prev) => [
             ...prev,
-            { file, url, draftDataUrl, driveUrl: "", driveLink: "" },
+            { file, url, driveUrl: "", driveLink: "" },
           ]);
         })
         .catch(() => setError("Could not read that image."));
@@ -506,17 +399,10 @@ export default function IncidentsPage() {
         status: draft.status === "resolved" ? "resolved" : "unresolved",
       });
       if (err) throw new Error(err.message);
-      try {
-        localStorage.removeItem(DRAFT_KEY);
-      } catch {
-        // fine without it
-      }
       setDraft(emptyDraft(records.length));
       setPhotos([]);
       setAiCapa(null);
       setAiDone(false);
-      setDraftRestored(false);
-      setLastSavedAt(null);
       setFormOpen(false);
       await load();
     } catch (e) {
@@ -606,7 +492,7 @@ export default function IncidentsPage() {
             <h2 className="text-xl font-semibold text-zinc-50">Incident Log</h2>
             <p className="mt-1 text-sm text-zinc-500">
               Incident registration with AI-suggested SOP / ISO clauses and a CAPA
-              plan. Your draft is saved automatically as you type.
+              plan.
             </p>
           </div>
           <button
@@ -650,19 +536,6 @@ export default function IncidentsPage() {
                 {draft.incidentId}
               </span>
             </div>
-
-            {(draftRestored || lastSavedAt) && (
-              <p className="mt-2 text-xs text-emerald-400/90">
-                {draftRestored && "Draft restored — your unsaved form is back."}
-                {draftRestored && lastSavedAt ? " " : ""}
-                {lastSavedAt
-                  ? `Autosaved at ${lastSavedAt.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}.`
-                  : ""}
-              </p>
-            )}
 
             {/* ---------- 1. INCIDENT DETAILS ---------- */}
             <div className="mt-5 flex flex-col gap-4">

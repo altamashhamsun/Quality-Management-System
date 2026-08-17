@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
@@ -50,29 +50,6 @@ const PLAN_SECTIONS: { key: string; label: string }[] = [
 
 const emptySections = () =>
   Object.fromEntries(PLAN_SECTIONS.map((s) => [s.key, ""])) as Record<string, string>;
-
-const DRAFT_KEY = "auditPlanDraft";
-
-type PlanDraft = {
-  id: string | null;
-  title: string;
-  description: string;
-  sections: Record<string, string>;
-  startDate: string;
-  endDate: string;
-  department_ids: string[];
-};
-
-function readDraft(): PlanDraft | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(DRAFT_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as PlanDraft;
-  } catch {
-    return null;
-  }
-}
 
 type PlanDepartment = {
   id: string;
@@ -128,6 +105,9 @@ function AuditContent() {
   const [endDate, setEndDate] = useState("");
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   const [leadAuditor, setLeadAuditor] = useState("");
+  const autosaveDocId = useRef<string | null>(null);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
   useEffect(() => {
     if (loading) return;
@@ -163,21 +143,52 @@ function AuditContent() {
     })();
   }, [loading, load]);
 
-  // Autosave the audit plan form as a local draft so closing the window or
-  // refreshing mid-edit never loses the work. Restored on the next open.
+  // Autosave the audit plan form to Supabase so closing the window or
+  // refreshing mid-edit never loses the work. For new plans a row is inserted
+  // on the first non-empty save; subsequent changes update that row.
   useEffect(() => {
     if (!modalOpen || activeTab !== "plan") return;
-    const draft: PlanDraft = {
-      id: editing?.id ?? null,
-      title,
-      description,
-      sections,
-      startDate,
-      endDate,
-      department_ids: selectedDepts,
+    if (!title.trim()) return;
+
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    setAutosaveStatus("saving");
+
+    autosaveTimer.current = setTimeout(async () => {
+      const summary = PLAN_SECTIONS.map((s) => {
+        const text = htmlToText(sections[s.key]).trim();
+        return text ? `${s.label}: ${text}` : "";
+      })
+        .filter(Boolean)
+        .join("\n");
+
+      const payload = {
+        category: "plan" as const,
+        title: title.trim(),
+        description: summary || null,
+        content: sections,
+        start_date: startDate || null,
+        end_date: endDate || null,
+        department_ids: selectedDepts,
+      };
+
+      const docId = editing?.id ?? autosaveDocId.current;
+      if (docId) {
+        await supabase.from("audit_documents").update(payload).eq("id", docId);
+      } else {
+        const { data } = await supabase
+          .from("audit_documents")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (data) autosaveDocId.current = data.id;
+      }
+      setAutosaveStatus("saved");
+    }, 800);
+
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
-    window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-  }, [modalOpen, activeTab, editing, title, description, sections, startDate, endDate, selectedDepts]);
+  }, [modalOpen, activeTab, editing, title, sections, startDate, endDate, selectedDepts]);
 
   const activeDocuments = documents.filter((doc) => doc.category === activeTab);
 
@@ -229,36 +240,29 @@ function AuditContent() {
 
   function openCreate() {
     setEditing(null);
-    const draft = readDraft();
-    setTitle(draft?.title ?? "");
-    setDescription(draft?.description ?? "");
-    setSections({ ...emptySections(), ...(draft?.sections ?? {}) });
-    setStartDate(draft?.startDate ?? "");
-    setEndDate(draft?.endDate ?? "");
-    setSelectedDepts(draft?.department_ids ?? []);
+    autosaveDocId.current = null;
+    setTitle("");
+    setDescription("");
+    setSections(emptySections());
+    setStartDate("");
+    setEndDate("");
+    setSelectedDepts([]);
     setError(null);
+    setAutosaveStatus("idle");
     setModalOpen(true);
   }
 
   function openEdit(doc: AuditDocument) {
     setEditing(doc);
-    const draft = readDraft();
-    if (draft && draft.id === doc.id) {
-      setTitle(draft.title);
-      setDescription(draft.description);
-      setSections({ ...emptySections(), ...draft.sections });
-      setStartDate(draft.startDate);
-      setEndDate(draft.endDate);
-      setSelectedDepts(draft.department_ids ?? []);
-    } else {
-      setTitle(doc.title);
-      setDescription(doc.description ?? "");
-      setSections({ ...emptySections(), ...(doc.content ?? {}) });
-      setStartDate(doc.start_date ?? "");
-      setEndDate(doc.end_date ?? "");
-      setSelectedDepts(doc.department_ids ?? []);
-    }
+    autosaveDocId.current = null;
+    setTitle(doc.title);
+    setDescription(doc.description ?? "");
+    setSections({ ...emptySections(), ...(doc.content ?? {}) });
+    setStartDate(doc.start_date ?? "");
+    setEndDate(doc.end_date ?? "");
+    setSelectedDepts(doc.department_ids ?? []);
     setError(null);
+    setAutosaveStatus("idle");
     setModalOpen(true);
   }
 
@@ -309,11 +313,12 @@ function AuditContent() {
     }
 
     let result;
-    if (editing) {
+    const docId = editing?.id ?? autosaveDocId.current;
+    if (docId) {
       result = await supabase
         .from("audit_documents")
         .update(payload)
-        .eq("id", editing.id);
+        .eq("id", docId);
     } else {
       result = await supabase.from("audit_documents").insert(payload);
     }
@@ -325,8 +330,8 @@ function AuditContent() {
       return;
     }
 
+    autosaveDocId.current = null;
     setModalOpen(false);
-    window.localStorage.removeItem(DRAFT_KEY);
     load();
   }
 
@@ -470,10 +475,15 @@ function AuditContent() {
       <Modal
         open={modalOpen}
         title={editing ? "Edit Document" : "Add Document"}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { autosaveDocId.current = null; setModalOpen(false); }}
         xwide={activeTab === "plan"}
         wide={activeTab !== "plan"}
       >
+        {activeTab === "plan" && modalOpen && (
+          <div className="mb-2 text-right text-[11px] text-zinc-500">
+            {autosaveStatus === "saving" && title.trim() ? "Saving..." : autosaveStatus === "saved" ? "Saved to Supabase" : ""}
+          </div>
+        )}
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
             Title
