@@ -36,6 +36,12 @@ body::after {
   height: env(safe-area-inset-bottom);
 }
 
+select,
+select[class] {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+
 body::-webkit-scrollbar {
   width: 0;
   height: 0;
