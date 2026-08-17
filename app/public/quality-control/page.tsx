@@ -245,49 +245,75 @@ export default function PublicQualityControlPage() {
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
-          {reports.map((report) => (
-            <div
-              key={report.id}
-              className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-semibold text-zinc-50">{report.title}</h4>
-                    <span className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                      report.status === "active"
-                        ? "bg-emerald-950 text-emerald-400"
-                        : "bg-zinc-800 text-zinc-500"
-                    }`}>
-                      {report.status}
-                    </span>
+        <div className="space-y-6">
+          {(() => {
+            const grouped = new Map<string, QCReport[]>();
+            for (const r of reports) {
+              const list = grouped.get(r.branch_id) ?? [];
+              list.push(r);
+              grouped.set(r.branch_id, list);
+            }
+            return [...grouped.keys()]
+              .sort((a, b) => branchName(a).localeCompare(branchName(b)))
+              .map((branchId) => {
+                const branchReports = (grouped.get(branchId) ?? []).sort(
+                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+                );
+                return (
+                  <div key={branchId}>
+                    <h3 className="mb-3 text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                      {branchName(branchId)}
+                      <span className="ml-2 text-zinc-600 normal-case tracking-normal">
+                        ({branchReports.length})
+                      </span>
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {branchReports.map((report) => (
+                        <div
+                          key={report.id}
+                          className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="text-sm font-semibold text-zinc-50">{report.title}</h4>
+                                <span className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                                  report.status === "active"
+                                    ? "bg-emerald-950 text-emerald-400"
+                                    : "bg-zinc-800 text-zinc-500"
+                                }`}>
+                                  {report.status}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-zinc-500">
+                                {new Date(report.created_at).toLocaleDateString("en-GB", {
+                                  day: "2-digit", month: "short", year: "numeric",
+                                })}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => downloadPdf(report)}
+                                disabled={pdfBusy}
+                                className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white disabled:opacity-50"
+                              >
+                                PDF
+                              </button>
+                              <button
+                                onClick={() => setSelectedReport(report)}
+                                className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+                              >
+                                View
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {branchName(report.branch_id)} &middot;{" "}
-                    {new Date(report.created_at).toLocaleDateString("en-GB", {
-                      day: "2-digit", month: "short", year: "numeric",
-                    })}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => downloadPdf(report)}
-                    disabled={pdfBusy}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white disabled:opacity-50"
-                  >
-                    PDF
-                  </button>
-                  <button
-                    onClick={() => setSelectedReport(report)}
-                    className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+                );
+              });
+          })()}
         </div>
       )}
     </div>

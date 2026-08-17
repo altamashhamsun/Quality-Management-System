@@ -507,6 +507,25 @@ export default function QualityControlPage() {
     setSelectedSession(null);
   }
 
+  async function deleteReport(reportId: string) {
+    if (!window.confirm("Delete this report and all its rounds? This cannot be undone.")) return;
+    const { data: sessList } = await supabase
+      .from("quality_sessions")
+      .select("id")
+      .eq("report_id", reportId);
+    for (const s of sessList ?? []) {
+      await supabase.from("quality_descriptions").delete().eq("session_id", s.id);
+    }
+    await supabase.from("quality_sessions").delete().eq("report_id", reportId);
+    await supabase.from("quality_reports").delete().eq("id", reportId);
+    setReports((p) => p.filter((r) => r.id !== reportId));
+    if (selectedReport?.id === reportId) {
+      setSelectedReport(null);
+      setSelectedSession(null);
+      setView("list");
+    }
+  }
+
   async function answerItem(itemId: string, answer: boolean) {
     if (!selectedSession) return;
     const updated = (selectedSession.checklist ?? []).map((i) =>
@@ -541,6 +560,16 @@ export default function QualityControlPage() {
   const filteredReports = selectedBranchId
     ? reports.filter((r) => r.branch_id === selectedBranchId)
     : reports;
+
+  const reportsByBranch = new Map<string, QCReport[]>();
+  for (const report of filteredReports) {
+    const list = reportsByBranch.get(report.branch_id) ?? [];
+    list.push(report);
+    reportsByBranch.set(report.branch_id, list);
+  }
+  const sortedBranchIds = [...reportsByBranch.keys()].sort((a, b) =>
+    branchName(a).localeCompare(branchName(b)),
+  );
 
   const isRound1 = selectedSession?.round_number === 1;
   const activeChecklist = selectedSession?.checklist ?? [];
@@ -616,49 +645,75 @@ export default function QualityControlPage() {
                 begin.
               </p>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {filteredReports.map((report) => (
-                  <div
-                    key={report.id}
-                    className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-800 hover:bg-zinc-900/40"
-                  >
-                    <div className="mb-2 flex items-start justify-between gap-3">
-                      <h3 className="text-sm font-semibold text-zinc-50">
-                        {report.title}
+              <div className="space-y-6">
+                {sortedBranchIds.map((branchId) => {
+                  const branchReports = reportsByBranch.get(branchId) ?? [];
+                  return (
+                    <div key={branchId}>
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+                        {branchName(branchId)}
+                        <span className="ml-2 text-zinc-600 normal-case tracking-normal">
+                          ({branchReports.length})
+                        </span>
                       </h3>
-                      <span
-                        className={`shrink-0 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
-                          report.status === "active"
-                            ? "bg-emerald-950 text-emerald-400"
-                            : "bg-zinc-900/60 text-zinc-500"
-                        }`}
-                      >
-                        {report.status}
-                      </span>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {branchReports
+                          .sort(
+                            (a, b) =>
+                              new Date(b.created_at).getTime() -
+                              new Date(a.created_at).getTime(),
+                          )
+                          .map((report) => (
+                            <div
+                              key={report.id}
+                              className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/40"
+                            >
+                              <div className="mb-2 flex items-start justify-between gap-3">
+                                <h3 className="text-sm font-semibold text-zinc-50">
+                                  {report.title}
+                                </h3>
+                                <span
+                                  className={`shrink-0 rounded px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                                    report.status === "active"
+                                      ? "bg-emerald-950 text-emerald-400"
+                                      : "bg-zinc-800 text-zinc-500"
+                                  }`}
+                                >
+                                  {report.status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-500">
+                                {new Date(
+                                  report.created_at,
+                                ).toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              <div className="mt-3 flex justify-end gap-2">
+                                <button
+                                  onClick={() => deleteReport(report.id)}
+                                  className="rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs text-red-400 transition hover:bg-red-950 hover:border-red-800"
+                                >
+                                  Delete
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedReport(report);
+                                    setView("report");
+                                  }}
+                                  className="rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-300 transition hover:bg-zinc-900/60"
+                                >
+                                  Open
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
-                    <p className="text-xs text-zinc-500">
-                      {branchName(report.branch_id)} &middot;{" "}
-                      {new Date(
-                        report.created_at,
-                      ).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                    <div className="mt-3 flex justify-end">
-                      <button
-                        onClick={() => {
-                          setSelectedReport(report);
-                          setView("report");
-                        }}
-                        className="rounded-lg border border-zinc-800 px-2.5 py-1.5 text-xs text-zinc-500 transition hover:bg-zinc-900/60"
-                      >
-                        Open
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -722,6 +777,12 @@ export default function QualityControlPage() {
                     Close Report
                   </button>
                 )}
+                <button
+                  onClick={() => deleteReport(selectedReport.id)}
+                  className="rounded-lg border border-red-900 px-3 py-2 text-sm text-red-400 transition hover:bg-red-950"
+                >
+                  Delete
+                </button>
               </div>
             </div>
             {sessions.length === 0 ? (

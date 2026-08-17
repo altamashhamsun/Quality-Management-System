@@ -1,67 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./supabase";
+
+async function tryGetSession(
+  retries = 2,
+  delayMs = 800,
+): Promise<import("@supabase/supabase-js").Session | null> {
+  for (let i = 0; i <= retries; i++) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return data.session;
+
+    if (i < retries) {
+      const { data: r } = await supabase.auth.refreshSession();
+      if (r.session) return r.session;
+      await new Promise((ok) => setTimeout(ok, delayMs));
+    }
+  }
+  return null;
+}
 
 export function useAuth() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const gaveUp = useRef(false);
 
   useEffect(() => {
     let active = true;
-    let redirecting = false;
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        if (!active) return;
         if (session) {
           setEmail(session.user.email ?? null);
           setLoading(false);
-        } else if (!redirecting) {
-          // Do NOT redirect here: on first load the listener may fire with
-          // null before getSession/refresh resolves. Redirect only after we
-          // confirmed there is genuinely no recoverable session.
+          gaveUp.current = false;
+        } else if (!gaveUp.current) {
           setEmail(null);
         }
       },
     );
 
     (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!active) return;
-        if (data.session) {
-          setEmail(data.session.user.email ?? null);
-          setLoading(false);
-          return;
-        }
-        // Access token may have expired while the app was closed. Try to
-        // refresh the session (using the persisted refresh token) before
-        // treating the user as logged out.
-        const { data: refreshed } = await supabase.auth.refreshSession();
-        if (!active) return;
-        if (refreshed.session) {
-          setEmail(refreshed.session.user.email ?? null);
-          setLoading(false);
-          return;
-        }
-      } catch {
-        // Network/storage glitch: don't force a sign-out because of it.
-        // The auth listener above will still surface any real session.
-        if (!active) return;
-        const { data } = await supabase.auth.getSession();
-        if (!active) return;
-        if (data.session) {
-          setEmail(data.session.user.email ?? null);
-          setLoading(false);
-          return;
-        }
-        redirecting = true;
-        router.replace("/");
+      const session = await tryGetSession();
+      if (!active) return;
+      if (session) {
+        setEmail(session.user.email ?? null);
+        setLoading(false);
         return;
       }
-      redirecting = true;
+      gaveUp.current = true;
       router.replace("/");
     })();
 
