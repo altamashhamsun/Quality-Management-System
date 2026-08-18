@@ -17,7 +17,7 @@ import {
   type HasmRecord,
   type HasmReport,
 } from "@/lib/hasm";
-import { downloadHasmPdf } from "@/lib/hasmPdf";
+
 import Lightbox from "@/components/Lightbox";
 
 type Photo = {
@@ -269,6 +269,7 @@ export default function HasmPage() {
   async function makePdf(record: HasmRecord) {
     setPdfBusy(record.id);
     try {
+      const { downloadHasmPdf } = await import("@/lib/hasmPdf");
       await downloadHasmPdf(record);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not generate the PDF.");

@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
-import { downloadAuditPlanPdf } from "@/lib/auditPlanPdf";
+
 
 type AuditEvent = {
   id: string;
@@ -402,7 +402,8 @@ export default function CalendarPage() {
     [events, plans],
   );
 
-  function handlePlanPdf(item: CalendarItem) {
+  async function handlePlanPdf(item: CalendarItem) {
+    const { downloadAuditPlanPdf } = await import("@/lib/auditPlanPdf");
     downloadAuditPlanPdf({
       title: item.title,
       reference: `AUD-${item.id.slice(0, 8)}`,

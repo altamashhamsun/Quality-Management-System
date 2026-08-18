@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useTrackPage } from "@/lib/useTrackPage";
 
 const NAV_ITEMS = [
   { label: "Branches", path: "/branches" },
@@ -22,6 +23,7 @@ export default function Header({ email }: { email?: string | null }) {
   const [open, setOpen] = useState(false);
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  useTrackPage();
 
   useEffect(() => {
     let active = true;

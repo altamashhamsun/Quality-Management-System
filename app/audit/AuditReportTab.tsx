@@ -6,7 +6,6 @@ import { useAuth } from "@/lib/useAuth";
 import { NcrRecord } from "@/lib/ncr";
 import { isResolved, severityLabel, type IncidentRecord } from "@/lib/incident";
 import {
-  downloadAuditReportPdf,
   type AuditReportPdfData,
   type ReportIncident,
   type ReportNc,
@@ -491,6 +490,7 @@ export default function AuditReportTab() {
           : qcUnresolved,
         photos,
       };
+      const { downloadAuditReportPdf } = await import("@/lib/auditReportPdf");
       downloadAuditReportPdf(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate PDF.");

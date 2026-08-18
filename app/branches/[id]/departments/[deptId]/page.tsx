@@ -8,7 +8,7 @@ import Modal from "@/components/Modal";
 import Header from "@/components/Header";
 import StatsTile from "@/components/StatsTile";
 import StatusBadge from "@/components/StatusBadge";
-import { downloadNcrPdf, downloadNcrsPdf } from "@/lib/ncrPdf";
+
 import {
   FIELDS,
   NcrRecord,
@@ -504,6 +504,7 @@ export default function NcrPage() {
   async function handleNcrPdf(record: NcrRecord) {
     setPdfBusy(record.id);
     try {
+      const { downloadNcrPdf } = await import("@/lib/ncrPdf");
       const photos = await photoDataUrls(record.pictures ?? []);
       await downloadNcrPdf(recordToPdfData(record, photos));
     } finally {
@@ -519,6 +520,7 @@ export default function NcrPage() {
         const photos = await photoDataUrls(r.pictures ?? []);
         ncrs.push(recordToPdfData(r, photos));
       }
+      const { downloadNcrsPdf } = await import("@/lib/ncrPdf");
       await downloadNcrsPdf(ncrs, `ncrs-${group.label.replace(/\s+/g, "-")}.pdf`);
     } finally {
       setPdfBusy(null);

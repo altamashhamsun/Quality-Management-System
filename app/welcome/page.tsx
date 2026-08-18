@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getLastPage } from "@/lib/useTrackPage";
 
 export default function Welcome() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function Welcome() {
         router.replace("/");
         return;
       }
-      router.replace("/branches");
+      router.replace(getLastPage());
     });
   }, [router]);
 

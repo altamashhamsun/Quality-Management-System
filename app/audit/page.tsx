@@ -7,7 +7,6 @@ import { useAuth } from "@/lib/useAuth";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
-import { downloadAuditPlanPdf } from "@/lib/auditPlanPdf";
 import AuditorTab from "./AuditorTab";
 import AuditReportTab from "./AuditReportTab";
 
@@ -227,7 +226,8 @@ function AuditContent() {
     return `${new Date(doc.start_date + "T00:00:00").toLocaleDateString(undefined, opts)} — ${new Date(doc.end_date + "T00:00:00").toLocaleDateString(undefined, opts)}`;
   }
 
-  function handlePlanPdf(doc: AuditDocument) {
+  async function handlePlanPdf(doc: AuditDocument) {
+    const { downloadAuditPlanPdf } = await import("@/lib/auditPlanPdf");
     downloadAuditPlanPdf({
       title: doc.title,
       reference: `AUD-${doc.id.slice(0, 8).toUpperCase()}`,

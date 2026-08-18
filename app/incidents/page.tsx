@@ -23,7 +23,7 @@ import {
   severityLabel,
   type IncidentRecord,
 } from "@/lib/incident";
-import { downloadIncidentReportPdf } from "@/lib/incidentReportPdf";
+
 
 type Photo = {
   file: File;
@@ -474,6 +474,7 @@ export default function IncidentsPage() {
     setPdfBusy(true);
     setError(null);
     try {
+      const { downloadIncidentReportPdf } = await import("@/lib/incidentReportPdf");
       await downloadIncidentReportPdf(records);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate the report PDF.");

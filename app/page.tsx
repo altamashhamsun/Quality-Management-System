@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getLastPage } from "@/lib/useTrackPage";
 
 export default function SignIn() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function SignIn() {
       try {
         const { data } = await supabase.auth.getSession();
         if (active && data.session) {
-          router.replace("/branches");
+          router.replace(getLastPage());
           return;
         }
       } catch {
@@ -47,7 +48,7 @@ export default function SignIn() {
       return;
     }
 
-    router.push("/branches");
+    router.push(getLastPage());
   }
 
   if (checking) {

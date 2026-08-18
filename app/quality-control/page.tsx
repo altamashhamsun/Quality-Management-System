@@ -1,21 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { useAuth } from "@/lib/useAuth";
 import { supabase } from "@/lib/supabase";
 import Header from "@/components/Header";
 import Modal from "@/components/Modal";
-import { downloadQualityReportPdf } from "@/lib/qualityReportPdf";
 
 type Branch = { id: string; name: string };
 type QCReport = {
@@ -72,6 +62,8 @@ const FALLBACK_ITEMS: Record<string, string[]> = {
 function areaItemKey(area: string, item: string) {
   return area + " / " + item;
 }
+
+const LazyQCChart = dynamic(() => import("@/components/QCChart"), { ssr: false });
 
 type EvalItem = { item: string; question: string; found_issue: string; resolvedAt?: string };
 type EvalData = {
@@ -677,8 +669,8 @@ export default function QualityControlPage() {
       .select("owner_name")
       .eq("id", 1)
       .maybeSingle();
-    downloadQualityReportPdf({
-      title: selectedReport.title,
+    const { downloadQualityReportPdf } = await import("@/lib/qualityReportPdf");
+    downloadQualityReportPdf({      title: selectedReport.title,
       branchName: branchName(selectedReport.branch_id),
       date: todayStr(),
       auditor: settings?.owner_name || undefined,
@@ -815,28 +807,9 @@ export default function QualityControlPage() {
                 {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
               </select>
             </div>
-            {chartData && chartData.length > 0 && (() => {
-              const branchNames = Object.keys(chartData[0]).filter((k) => k !== "round");
-              const colors = ["#e11d48", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2"];
-              return (
-                <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
-                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Issues Resolved per Round</h3>
-                  <p className="mb-4 text-xs text-zinc-500">How many issues each branch resolved in each round</p>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                      <XAxis dataKey="round" tick={{ fill: "#a1a1aa", fontSize: 12 }} tickFormatter={(v) => `R${v}`} stroke="#3f3f46" />
-                      <YAxis tick={{ fill: "#a1a1aa", fontSize: 12 }} stroke="#3f3f46" allowDecimals={false} />
-                      <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, color: "#fafafa", fontSize: 12 }} labelFormatter={(v) => `Round ${v}`} />
-                      <Legend wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }} />
-                      {branchNames.map((name, i) => (
-                        <Line key={name} type="monotone" dataKey={name} stroke={colors[i % colors.length]} strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              );
-            })()}
+            {chartData && chartData.length > 0 && (
+              <LazyQCChart data={chartData} />
+            )}
             {branchRankings.length > 0 && (
               <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
                 <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Branch Rankings</h3>

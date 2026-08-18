@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 export type NcrRecord = {
   id: string;
   department_id: string | null;
@@ -83,17 +81,20 @@ const HEADER_MAP: Record<string, string> = {
 const NUMBER_KEYS = new Set(["opening_ncs", "closing_ncs"]);
 
 export function exportNcrToXlsx(records: NcrRecord[]) {
-  const rows = records.map((record) => {
-    const row: Record<string, unknown> = {};
-    for (const field of FIELDS) {
-      row[field.label] = record[field.key as keyof NcrRecord] ?? "";
-    }
-    return row;
-  });
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "NCRs");
-  XLSX.writeFile(workbook, "ncrs.xlsx");
+  return (async () => {
+    const XLSX = await import("xlsx");
+    const rows = records.map((record) => {
+      const row: Record<string, unknown> = {};
+      for (const field of FIELDS) {
+        row[field.label] = record[field.key as keyof NcrRecord] ?? "";
+      }
+      return row;
+    });
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "NCRs");
+    XLSX.writeFile(workbook, "ncrs.xlsx");
+  })();
 }
 
 const DATE_KEYS = new Set(["opening_ncs", "closing_ncs"]);
@@ -118,6 +119,7 @@ export function formatDisplayValue(key: string, value: unknown): string {
 }
 
 export async function parseNcrFile(file: File): Promise<Partial<NcrRecord>[]> {
+  const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];

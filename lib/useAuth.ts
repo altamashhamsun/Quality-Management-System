@@ -1,31 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./supabase";
-
-async function tryGetSession(
-  retries = 2,
-  delayMs = 800,
-): Promise<import("@supabase/supabase-js").Session | null> {
-  for (let i = 0; i <= retries; i++) {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) return data.session;
-
-    if (i < retries) {
-      const { data: r } = await supabase.auth.refreshSession();
-      if (r.session) return r.session;
-      await new Promise((ok) => setTimeout(ok, delayMs));
-    }
-  }
-  return null;
-}
 
 export function useAuth() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const gaveUp = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -36,24 +18,24 @@ export function useAuth() {
         if (session) {
           setEmail(session.user.email ?? null);
           setLoading(false);
-          gaveUp.current = false;
-        } else if (!gaveUp.current) {
+        } else {
           setEmail(null);
+          setLoading(false);
+          router.replace("/");
         }
       },
     );
 
-    (async () => {
-      const session = await tryGetSession();
+    supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
-      if (session) {
-        setEmail(session.user.email ?? null);
+      if (data.session) {
+        setEmail(data.session.user.email ?? null);
         setLoading(false);
-        return;
+      } else {
+        setLoading(false);
+        router.replace("/");
       }
-      gaveUp.current = true;
-      router.replace("/");
-    })();
+    });
 
     return () => {
       active = false;
