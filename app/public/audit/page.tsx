@@ -265,6 +265,7 @@ export default function PublicAuditPage() {
         majorNcs,
         minorNcs,
         incidents: incidentRows,
+        qcIssues: [],
         photos,
       };
       downloadAuditReportPdf(data);

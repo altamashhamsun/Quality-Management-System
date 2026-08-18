@@ -24,6 +24,15 @@ export type ReportIncident = {
   description: string;
 };
 
+export type ReportQcIssue = {
+  branch: string;
+  reportTitle: string;
+  item: string;
+  question: string;
+  foundIssue: string;
+  roundNumber: number;
+};
+
 export type AuditReportPdfData = {
   title: string;
   reference: string;
@@ -40,6 +49,7 @@ export type AuditReportPdfData = {
   majorNcs: ReportNc[];
   minorNcs: ReportNc[];
   incidents: ReportIncident[];
+  qcIssues: ReportQcIssue[];
   photos: string[];
 };
 
@@ -348,8 +358,35 @@ export function downloadAuditReportPdf(data: AuditReportPdfData) {
     );
   }
 
+  // ---------- QC UNRESOLVED ISSUES ----------
+  if (data.qcIssues.length > 0) {
+    sectionHeader("8. Quality Control - Unresolved Issues");
+    if (data.qcIssues.length === 0) {
+      emptyBox("No unresolved QC issues found.");
+    } else {
+      for (const qc of data.qcIssues) {
+        ensure(22);
+        doc.setFillColor(45, 10, 10);
+        doc.roundedRect(MARGIN, y, MAX_W, 18, 2, 2, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(230, 100, 100);
+        doc.text(`Branch: ${qc.branch}  |  Report: ${qc.reportTitle}  |  Round ${qc.roundNumber}`, MARGIN + 4, y + 5);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(180, 180, 180);
+        doc.text(qc.item, MARGIN + 4, y + 10);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Q: ${qc.question}`, MARGIN + 4, y + 14);
+        doc.setTextColor(120, 120, 120);
+        doc.text(`Found: ${qc.foundIssue}`, MARGIN + 4, y + 18);
+        y += 22;
+      }
+    }
+  }
+
   // ---------- OFI ----------
-  sectionHeader("7. Opportunities for Improvement");
+  sectionHeader("9. Opportunities for Improvement");
   const ofi = [...data.majorNcs, ...data.minorNcs].filter(
     (n) => n.correctiveAction || n.preventiveAction,
   );

@@ -10,6 +10,7 @@ import {
   type AuditReportPdfData,
   type ReportIncident,
   type ReportNc,
+  type ReportQcIssue,
 } from "@/lib/auditReportPdf";
 
 type PlanDoc = {
@@ -27,6 +28,29 @@ type Department = {
 };
 
 const EXCEL_EPOCH_OFFSET = 25569;
+
+type QcReportRow = {
+  id: string;
+  branch_id: string;
+  title: string;
+  status: string;
+  created_at: string;
+};
+type QcSessionRow = {
+  id: string;
+  report_id: string;
+  round_number: number;
+  checklist: { id: string; item: string; question: string; found_issue: string; answer?: boolean }[] | null;
+};
+type QcBranchRow = { id: string; name: string };
+type QcUnresolved = {
+  branch: string;
+  reportTitle: string;
+  item: string;
+  question: string;
+  foundIssue: string;
+  roundNumber: number;
+};
 
 function excelSerialToDate(serial: number): Date {
   return new Date(Math.round((serial - EXCEL_EPOCH_OFFSET) * 86400000));
@@ -85,9 +109,12 @@ export default function AuditReportTab() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [qcBranches, setQcBranches] = useState<QcBranchRow[]>([]);
+  const [qcUnresolved, setQcUnresolved] = useState<QcUnresolved[]>([]);
+  const [selectedQcBranchIds, setSelectedQcBranchIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
-    const [plansResult, deptsResult, recordsResult, incidentsResult] = await Promise.all([
+    const [plansResult, deptsResult, recordsResult, incidentsResult, qcBranchesResult, qcReportsResult] = await Promise.all([
       supabase
         .from("audit_documents")
         .select("id, title, start_date, end_date, department_ids")
@@ -96,11 +123,42 @@ export default function AuditReportTab() {
       supabase.from("departments").select("id, name, branches(name)"),
       supabase.from("ncr_records").select("*"),
       supabase.from("incidents").select("*"),
+      supabase.from("branches").select("id, name").order("name"),
+      supabase.from("quality_reports").select("id, branch_id, title, status").order("created_at", { ascending: false }),
     ]);
     if (!plansResult.error) setPlans(plansResult.data ?? []);
     if (!deptsResult.error) setDepartments(deptsResult.data ?? []);
     if (!recordsResult.error) setRecords(recordsResult.data ?? []);
     if (!incidentsResult.error) setIncidents(incidentsResult.data ?? []);
+    if (!qcBranchesResult.error) setQcBranches(qcBranchesResult.data ?? []);
+
+    if (!qcReportsResult.error && qcReportsResult.data) {
+      const allUnresolved: QcUnresolved[] = [];
+      const branchMap = new Map((qcBranchesResult.data ?? []).map((b: QcBranchRow) => [b.id, b.name]));
+      for (const report of qcReportsResult.data as QcReportRow[]) {
+        const { data: sessions } = await supabase
+          .from("quality_sessions")
+          .select("id, round_number, checklist")
+          .eq("report_id", report.id)
+          .order("round_number");
+        for (const s of (sessions ?? []) as QcSessionRow[]) {
+          if (s.round_number === 1 || !s.checklist) continue;
+          for (const item of s.checklist) {
+            if (item.answer === false) {
+              allUnresolved.push({
+                branch: branchMap.get(report.branch_id) ?? "—",
+                reportTitle: report.title,
+                item: item.item,
+                question: item.question,
+                foundIssue: item.found_issue,
+                roundNumber: s.round_number,
+              });
+            }
+          }
+        }
+      }
+      setQcUnresolved(allUnresolved);
+    }
     setDataLoading(false);
   }, []);
 
@@ -425,6 +483,12 @@ export default function AuditReportTab() {
         majorNcs,
         minorNcs,
         incidents: incidentRows,
+        qcIssues: selectedQcBranchIds.length > 0
+          ? qcUnresolved.filter((q) => {
+              const branch = qcBranches.find((b) => b.name === q.branch);
+              return branch && selectedQcBranchIds.includes(branch.id);
+            })
+          : qcUnresolved,
         photos,
       };
       downloadAuditReportPdf(data);
@@ -670,6 +734,62 @@ export default function AuditReportTab() {
                     ))}
                   </div>
                 )}
+              </ReportSection>
+
+              <ReportSection title="QC Unresolved Issues (from Quality Control)">
+                <p className="mb-3 text-xs text-zinc-500">
+                  Unresolved items from closed QC rounds across all branches. Select branches to filter.
+                </p>
+                {qcBranches.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {qcBranches.map((b) => {
+                      const active = selectedQcBranchIds.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          onClick={() =>
+                            setSelectedQcBranchIds((prev) =>
+                              active ? prev.filter((id) => id !== b.id) : [...prev, b.id]
+                            )
+                          }
+                          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                            active
+                              ? "bg-red-600 text-white"
+                              : "border border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+                          }`}
+                        >
+                          {b.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {(() => {
+                  const filtered = selectedQcBranchIds.length > 0
+                    ? qcUnresolved.filter((q) => {
+                        const branch = qcBranches.find((b) => b.name === q.branch);
+                        return branch && selectedQcBranchIds.includes(branch.id);
+                      })
+                    : qcUnresolved;
+                  if (filtered.length === 0) {
+                    return <p className="text-sm text-zinc-500">No unresolved QC issues found.</p>;
+                  }
+                  return (
+                    <div className="flex flex-col gap-2">
+                      {filtered.map((q, i) => (
+                        <div key={i} className="rounded-lg border border-orange-900/40 bg-zinc-900/40 p-3">
+                          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-orange-300">{q.branch} &mdash; R{q.roundNumber}</p>
+                            <span className="text-[10px] text-zinc-500">{q.reportTitle}</span>
+                          </div>
+                          <p className="text-xs font-medium text-zinc-200">{q.item}</p>
+                          <p className="mt-1 text-xs text-zinc-400">{q.question}</p>
+                          <p className="mt-1 text-[10px] text-zinc-500">Found: {q.foundIssue}</p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </ReportSection>
 
               <ReportSection title="Opportunities for Improvement">
