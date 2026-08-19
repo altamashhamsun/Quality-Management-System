@@ -26,6 +26,21 @@ type NcrWithDept = {
     | null;
 };
 
+type QCReportRow = {
+  id: string;
+  branch_id: string;
+  title: string;
+};
+
+type QCSessionRow = {
+  id: string;
+  report_id: string;
+  round_number: number;
+  checklist: { item: string; question: string; found_issue: string; answer?: boolean }[] | null;
+  created_at: string;
+  closed_at: string | null;
+};
+
 type DeptStat = {
   branch: string;
   dept: string;
@@ -66,19 +81,34 @@ export default function PerformancesPage() {
   const { loading } = useAuth();
   const [records, setRecords] = useState<NcrWithDept[]>([]);
   const [incidents, setIncidents] = useState<IncidentRow[]>([]);
+  const [qcReports, setQcReports] = useState<QCReportRow[]>([]);
+  const [qcSessions, setQcSessions] = useState<QCSessionRow[]>([]);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const [recordsResult, incidentsResult] = await Promise.all([
+    const [recordsResult, incidentsResult, qcReportsResult, qcSessionsResult, branchesResult] = await Promise.all([
       supabase
         .from("ncr_records")
         .select("id, status, opening_ncs, closing_ncs, departments(name, branches(name))"),
       supabase
         .from("incidents")
         .select("id, status, branch_name, department_name, created_at, resolved_at"),
+      supabase
+        .from("quality_reports")
+        .select("id, branch_id, title"),
+      supabase
+        .from("quality_sessions")
+        .select("id, report_id, round_number, checklist, created_at, closed_at"),
+      supabase
+        .from("branches")
+        .select("id, name"),
     ]);
     setRecords(recordsResult.data ?? []);
     setIncidents(incidentsResult.data ?? []);
+    setQcReports(qcReportsResult.data ?? []);
+    setQcSessions(qcSessionsResult.data ?? []);
+    setBranches(branchesResult.data ?? []);
     setDataLoading(false);
   }, []);
 
@@ -196,6 +226,65 @@ export default function PerformancesPage() {
       else branchStat.unresolved += 1;
     }
 
+    const branchIdToName = new Map<string, string>();
+    for (const b of branches) {
+      branchIdToName.set(b.id, b.name);
+    }
+    const reportToBranchId = new Map<string, string>();
+    for (const report of qcReports) {
+      reportToBranchId.set(report.id, report.branch_id);
+    }
+    for (const session of qcSessions) {
+      if (!session.checklist) continue;
+      const branchId = reportToBranchId.get(session.report_id);
+      if (!branchId) continue;
+      const branch = branchIdToName.get(branchId) ?? "Unknown QC Branch";
+      for (const item of session.checklist) {
+        if (!item.found_issue) continue;
+        const resolved = item.answer === true;
+        const deptKey = `${branch}|Quality Control`;
+        let deptStat = deptMap.get(deptKey);
+        if (!deptStat) {
+          deptStat = {
+            branch,
+            dept: "Quality Control",
+            total: 0,
+            resolved: 0,
+            unresolved: 0,
+            minDays: null,
+            avgDays: null,
+            pct: 0,
+          };
+          deptMap.set(deptKey, deptStat);
+        }
+        deptStat.total += 1;
+        if (resolved) deptStat.resolved += 1;
+        else deptStat.unresolved += 1;
+
+        if (resolved && session.closed_at) {
+          const days = Math.round(
+            (new Date(session.closed_at).getTime() - new Date(session.created_at).getTime()) /
+              86400000,
+          );
+          if (days >= 0) {
+            deptStat.minDays =
+              deptStat.minDays == null ? days : Math.min(deptStat.minDays, days);
+            deptStat.avgDays =
+              deptStat.avgDays == null ? days : (deptStat.avgDays + days) / 2;
+          }
+        }
+
+        let branchStat = branchMap.get(branch);
+        if (!branchStat) {
+          branchStat = { branch, total: 0, resolved: 0, unresolved: 0, pct: 0 };
+          branchMap.set(branch, branchStat);
+        }
+        branchStat.total += 1;
+        if (resolved) branchStat.resolved += 1;
+        else branchStat.unresolved += 1;
+      }
+    }
+
     const deptStats = [...deptMap.values()].map((d) => ({
       ...d,
       pct: d.total === 0 ? 0 : Math.round((d.resolved / d.total) * 100),
@@ -210,7 +299,7 @@ export default function PerformancesPage() {
     branchStats.sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
 
     return { deptStats, branchStats };
-  }, [records, incidents]);
+  }, [records, incidents, qcReports, qcSessions, branches]);
 
   const maxDeptResolved = Math.max(1, ...deptStats.map((d) => d.resolved));
   const bestBranch = branchStats[0];
@@ -315,6 +404,11 @@ export default function PerformancesPage() {
                           <div>
                             <p className="text-sm font-semibold text-zinc-100">
                               {d.dept}
+                              {d.dept === "Quality Control" && (
+                                <span className="ml-2 inline-block rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">
+                                  QC
+                                </span>
+                              )}
                             </p>
                             <p className="text-[10px] uppercase tracking-wide text-zinc-500">
                               {d.branch}
