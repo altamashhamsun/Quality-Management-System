@@ -181,9 +181,11 @@ function findingToIssue(f: AuditFinding): Issue {
 export default function AuditorTab({
   branchId,
   deptId,
+  readonly = false,
 }: {
   branchId?: string | null;
   deptId?: string | null;
+  readonly?: boolean;
 }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -400,7 +402,7 @@ export default function AuditorTab({
   // Debounced auto-save: findings (and photos) persist to Supabase + Drive
   // while the audit is active, so nothing is lost if the app closes.
   useEffect(() => {
-    if (!activeAudit || issues.length === 0) return;
+    if (readonly || !activeAudit || issues.length === 0) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
       issues.forEach((issue) => {
@@ -849,7 +851,7 @@ export default function AuditorTab({
             <select
               value={selectedBranchId}
               onChange={(e) => handleBranchChange(e.target.value)}
-              disabled={!!activeAudit}
+              disabled={!!activeAudit || readonly}
               className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300 disabled:opacity-50"
             >
               <option value="">Select branch</option>
@@ -866,7 +868,7 @@ export default function AuditorTab({
             <select
               value={selectedDeptId}
               onChange={(e) => handleDeptChange(e.target.value)}
-              disabled={!selectedBranchId || !!activeAudit}
+              disabled={!selectedBranchId || !!activeAudit || readonly}
               className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300 disabled:opacity-50"
             >
               <option value="">Select department</option>
@@ -897,7 +899,7 @@ export default function AuditorTab({
                       key={s}
                       type="button"
                       onClick={() => toggleStandard(s)}
-                      disabled={!!activeAudit}
+                      disabled={!!activeAudit || readonly}
                       className={`rounded-full border px-3 py-1.5 text-left transition-colors disabled:opacity-50 ${
                         active
                           ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200"
@@ -920,7 +922,7 @@ export default function AuditorTab({
           </label>
         </div>
 
-        {selectedBranch && selectedDepartment && !activeAudit && (
+        {!readonly && selectedBranch && selectedDepartment && !activeAudit && (
           <button
             onClick={handleStartAudit}
             className="mt-4 rounded-lg border border-emerald-500/60 bg-emerald-500/15 px-5 py-2.5 text-sm font-semibold text-emerald-100 transition-colors hover:bg-emerald-500/25"
@@ -943,13 +945,15 @@ export default function AuditorTab({
                 and come back.
               </p>
             </div>
-            <button
-              onClick={handleStopAudit}
-              disabled={saving}
-              className="rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
-            >
-              {saving ? "Finalizing..." : "Stop Audit"}
-            </button>
+            {!readonly && (
+              <button
+                onClick={handleStopAudit}
+                disabled={saving}
+                className="rounded-lg border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+              >
+                {saving ? "Finalizing..." : "Stop Audit"}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -969,7 +973,7 @@ export default function AuditorTab({
                 onClick={() => handleDeleteIssue(issue)}
                 className="text-xs text-zinc-500 hover:text-zinc-300"
               >
-                {activeAudit ? "Delete" : issues.length > 1 ? "Remove" : ""}
+                {!readonly && (activeAudit ? "Delete" : issues.length > 1 ? "Remove" : "")}
               </button>
             </div>
 
@@ -979,31 +983,34 @@ export default function AuditorTab({
                 value={issue.raw}
                 onChange={(e) => updateIssue(issue.key, { raw: e.target.value })}
                 rows={2}
+                readOnly={readonly}
                 placeholder="e.g. Kitchen floor had food scraps left behind after the lunch shift"
                 className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none placeholder:text-zinc-600 focus:border-zinc-300"
               />
             </label>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-lg border border-zinc-600 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-300">
-                + Add Photos
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  capture="environment"
-                  className="hidden"
-                  onChange={(e) => addPhotos(issue.key, e.target.files)}
-                />
-              </label>
-              <button
-                onClick={() => analyzeWithAi(issue)}
-                disabled={issue.analyzing || !issue.raw.trim()}
-                className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-700 disabled:opacity-50"
-              >
-                {issue.analyzing ? "Analyzing..." : "Analyze with AI"}
-              </button>
-            </div>
+            {!readonly && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-lg border border-zinc-600 px-3 py-1.5 text-xs font-medium text-zinc-200 transition-colors hover:border-zinc-300">
+                  + Add Photos
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => addPhotos(issue.key, e.target.files)}
+                  />
+                </label>
+                <button
+                  onClick={() => analyzeWithAi(issue)}
+                  disabled={issue.analyzing || !issue.raw.trim()}
+                  className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+                >
+                  {issue.analyzing ? "Analyzing..." : "Analyze with AI"}
+                </button>
+              </div>
+            )}
 
             {issue.photos.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-3">
@@ -1015,13 +1022,15 @@ export default function AuditorTab({
                       alt={`Photo ${index + 1}`}
                       className="h-20 w-20 rounded-lg border border-zinc-700 object-cover"
                     />
-                    <button
-                      onClick={() => removePhoto(issue.key, index)}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-600 bg-zinc-950 text-[10px] text-zinc-300 hover:text-white"
-                      title="Remove photo"
-                    >
-                      x
-                    </button>
+                    {!readonly && (
+                      <button
+                        onClick={() => removePhoto(issue.key, index)}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-600 bg-zinc-950 text-[10px] text-zinc-300 hover:text-white"
+                        title="Remove photo"
+                      >
+                        x
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1067,17 +1076,19 @@ export default function AuditorTab({
                               Chosen
                             </span>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => applyAnalysis(issue.key, a)}
-                            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                              chosen
-                                ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-100"
-                                : "border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                            }`}
-                          >
-                            {chosen ? "Use this" : "Use this"}
-                          </button>
+                          {!readonly && (
+                            <button
+                              type="button"
+                              onClick={() => applyAnalysis(issue.key, a)}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                chosen
+                                  ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-100"
+                                  : "border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                              }`}
+                            >
+                              {chosen ? "Use this" : "Use this"}
+                            </button>
+                          )}
                         </div>
                       </div>
                       <p className="mt-2 text-xs text-zinc-300">{a.rephrased}</p>
@@ -1122,6 +1133,7 @@ export default function AuditorTab({
                     value={issue.rephrased}
                     onChange={(e) => updateIssue(issue.key, { rephrased: e.target.value })}
                     rows={2}
+                    readOnly={readonly}
                     className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                   />
                 </label>
@@ -1132,6 +1144,7 @@ export default function AuditorTab({
                       type="text"
                       value={issue.clauseNumber}
                       onChange={(e) => updateIssue(issue.key, { clauseNumber: e.target.value })}
+                      readOnly={readonly}
                       className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1141,6 +1154,7 @@ export default function AuditorTab({
                       type="text"
                       value={issue.clauseName}
                       onChange={(e) => updateIssue(issue.key, { clauseName: e.target.value })}
+                      readOnly={readonly}
                       className="rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1152,6 +1166,7 @@ export default function AuditorTab({
                       value={issue.rootCause}
                       onChange={(e) => updateIssue(issue.key, { rootCause: e.target.value })}
                       rows={2}
+                      readOnly={readonly}
                       className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1161,6 +1176,7 @@ export default function AuditorTab({
                       value={issue.correctiveAction}
                       onChange={(e) => updateIssue(issue.key, { correctiveAction: e.target.value })}
                       rows={2}
+                      readOnly={readonly}
                       className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1170,6 +1186,7 @@ export default function AuditorTab({
                       value={issue.preventiveAction}
                       onChange={(e) => updateIssue(issue.key, { preventiveAction: e.target.value })}
                       rows={2}
+                      readOnly={readonly}
                       className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1179,6 +1196,7 @@ export default function AuditorTab({
                       value={issue.consequences}
                       onChange={(e) => updateIssue(issue.key, { consequences: e.target.value })}
                       rows={2}
+                      readOnly={readonly}
                       className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-50 outline-none focus:border-zinc-300"
                     />
                   </label>
@@ -1188,12 +1206,14 @@ export default function AuditorTab({
           </div>
         ))}
 
-        <button
-          onClick={() => setIssues((prev) => [...prev, newIssue()])}
-          className="self-start rounded-lg border border-dashed border-zinc-600 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-zinc-300 hover:text-zinc-200"
-        >
-          + Add Another Issue
-        </button>
+        {!readonly && (
+          <button
+            onClick={() => setIssues((prev) => [...prev, newIssue()])}
+            className="self-start rounded-lg border border-dashed border-zinc-600 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-zinc-300 hover:text-zinc-200"
+          >
+            + Add Another Issue
+          </button>
+        )}
       </div>
 
       {error && (
@@ -1207,14 +1227,15 @@ export default function AuditorTab({
         </p>
       )}
 
-      <div className="sticky bottom-4 flex justify-end">
-        {activeAudit ? (
-          <button
-            onClick={handleStopAudit}
-            disabled={saving}
-            className="rounded-lg border border-emerald-500/60 bg-emerald-500/15 px-6 py-2.5 text-sm font-semibold text-emerald-100 transition-all duration-300 hover:bg-emerald-500/25 disabled:opacity-50"
-          >
-            {saving ? "Adding NCRs..." : "Stop Audit & Add NCRs"}
+      {!readonly && (
+        <div className="sticky bottom-4 flex justify-end">
+          {activeAudit ? (
+            <button
+              onClick={handleStopAudit}
+              disabled={saving}
+              className="rounded-lg border border-emerald-500/60 bg-emerald-500/15 px-6 py-2.5 text-sm font-semibold text-emerald-100 transition-all duration-300 hover:bg-emerald-500/25 disabled:opacity-50"
+            >
+              {saving ? "Adding NCRs..." : "Stop Audit & Add NCRs"}
           </button>
         ) : (
           <button
@@ -1226,6 +1247,7 @@ export default function AuditorTab({
           </button>
         )}
       </div>
+      )}
     </div>
   );
 }

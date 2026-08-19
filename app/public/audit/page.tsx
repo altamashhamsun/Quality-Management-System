@@ -122,7 +122,7 @@ function PublicAuditContent() {
       </div>
 
       {activeTab === "auditor" ? (
-        <AuditorTab />
+        <AuditorTab readonly />
       ) : activeTab === "auditReport" ? (
         <AuditReportTab readonly />
       ) : activeTab === "branchMonth" ? (
