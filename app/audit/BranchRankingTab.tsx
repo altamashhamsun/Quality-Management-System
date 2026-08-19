@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { isResolved } from "@/lib/incident";
 
@@ -32,6 +32,11 @@ type BranchStat = {
   pct: number;
 };
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 function extractBranchName(dept: NcrRow["departments"]): string | null {
   if (!dept) return null;
   const d = Array.isArray(dept) ? dept[0] : dept;
@@ -41,26 +46,30 @@ function extractBranchName(dept: NcrRow["departments"]): string | null {
 }
 
 export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [loading, setLoading] = useState(true);
   const [branchStats, setBranchStats] = useState<BranchStat[]>([]);
-  const [bestBranch, setBestBranch] = useState<BranchStat | null>(null);
 
-  const now = new Date();
+  const years = Array.from({ length: 10 }, (_, i) => now.getFullYear() - i);
+
   const periodLabel =
     mode === "month"
-      ? now.toLocaleDateString("en-GB", { month: "long", year: "numeric" })
-      : String(now.getFullYear());
+      ? `${MONTHS[selectedMonth]} ${selectedYear}`
+      : String(selectedYear);
 
   useEffect(() => {
+    setLoading(true);
     (async () => {
       const startDate =
         mode === "month"
-          ? new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-          : new Date(now.getFullYear(), 0, 1).toISOString();
+          ? new Date(selectedYear, selectedMonth, 1).toISOString()
+          : new Date(selectedYear, 0, 1).toISOString();
       const endDate =
         mode === "month"
-          ? new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
-          : new Date(now.getFullYear(), 11, 31, 23, 59, 59).toISOString();
+          ? new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString()
+          : new Date(selectedYear, 11, 31, 23, 59, 59).toISOString();
 
       const [ncrsResult, incidentsResult] = await Promise.all([
         supabase
@@ -112,27 +121,50 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
       stats.sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
 
       setBranchStats(stats);
-      setBestBranch(stats[0] ?? null);
       setLoading(false);
     })();
-  }, [mode]);
+  }, [mode, selectedMonth, selectedYear]);
 
-  if (loading) {
-    return <p className="text-sm text-zinc-500">Loading {mode === "month" ? "monthly" : "yearly"} data...</p>;
-  }
+  const bestBranch = branchStats[0] ?? null;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          {mode === "month" ? "Branch of the Month" : "Branch of the Year"}
-        </h3>
-        <p className="text-xs text-zinc-500">{periodLabel} &mdash; ranked by issue resolution rate</p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+            {mode === "month" ? "Branch of the Month" : "Branch of the Year"}
+          </h3>
+          <p className="text-xs text-zinc-500">{periodLabel} &mdash; ranked by issue resolution rate</p>
+        </div>
+        <div className="flex gap-2">
+          {mode === "month" && (
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+            >
+              {MONTHS.map((m, i) => (
+                <option key={i} value={i}>{m}</option>
+              ))}
+            </select>
+          )}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {!bestBranch ? (
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading...</p>
+      ) : !bestBranch ? (
         <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
-          No data for this {mode === "month" ? "month" : "year"} yet.
+          No data for {periodLabel} yet.
         </p>
       ) : (
         <>
