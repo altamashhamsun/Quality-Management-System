@@ -9,13 +9,16 @@ export default function Welcome() {
   const router = useRouter();
 
   useEffect(() => {
+    let active = true;
     supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
       if (!data.session) {
         router.replace("/");
         return;
       }
       router.replace(getLastPage());
     });
+    return () => { active = false; };
   }, [router]);
 
   return (

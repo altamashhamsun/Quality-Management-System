@@ -124,7 +124,7 @@ function PublicAuditContent() {
       {activeTab === "auditor" ? (
         <AuditorTab />
       ) : activeTab === "auditReport" ? (
-        <AuditReportTab />
+        <AuditReportTab readonly />
       ) : activeTab === "branchMonth" ? (
         <BranchRankingTab mode="month" />
       ) : activeTab === "branchYear" ? (

@@ -4,13 +4,19 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const LAST_PAGE_KEY = "lastVisitedPage";
-const IGNORE_PATHS = ["/", "/public", "/public/ncrs", "/public/audit", "/public/calendar", "/public/hasm", "/public/quality-control", "/public/incidents", "/public/performances"];
+const IGNORE_PREFIXES = ["/public", "/welcome", "/seed-fsl-areas"];
+const IGNORE_PATHS = ["/"];
+
+function shouldIgnore(path: string): boolean {
+  if (IGNORE_PATHS.includes(path)) return true;
+  return IGNORE_PREFIXES.some((p) => path.startsWith(p));
+}
 
 export function useTrackPage() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!pathname || IGNORE_PATHS.includes(pathname)) return;
+    if (!pathname || shouldIgnore(pathname)) return;
     try {
       window.localStorage.setItem(LAST_PAGE_KEY, pathname);
     } catch {}
