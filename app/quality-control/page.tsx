@@ -32,6 +32,7 @@ type QCItem = {
   question: string;
   found_issue: string;
   answer?: boolean;
+  photos?: string[];
 };
 type DescRow = {
   id: string;
@@ -93,9 +94,6 @@ export default function QualityControlPage() {
   const [createBranchId, setCreateBranchId] = useState("");
   const [createTitle, setCreateTitle] = useState("");
   const [savingAnswer, setSavingAnswer] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<
-    { round: number; [branch: string]: number | string }[] | null
-  >(null);
   const [branchRankings, setBranchRankings] = useState<
     { rank: number; name: string; totalIssues: number; resolved: number; unresolved: number; rounds: number; resolvedR1: number; resolutionRate: number }[]
   >([]);
@@ -111,8 +109,14 @@ export default function QualityControlPage() {
   const [deletingRound, setDeletingRound] = useState<string | null>(null);
   const [selectedUnresolvedBranch, setSelectedUnresolvedBranch] = useState<string | null>(null);
   const [persistentUnresolved, setPersistentUnresolved] = useState<
-    { branch: string; reportTitle: string; item: string; question: string; foundIssue: string; foundAt: string; lastCheckedAt: string; roundFound: number; roundLast: number }[]
+    { branch: string; branchId: string; reportTitle: string; reportId: string; item: string; question: string; foundIssue: string; foundAt: string; lastCheckedAt: string; roundFound: number; roundLast: number }[]
   >([]);
+  const [persistentStatuses, setPersistentStatuses] = useState<Record<string, boolean>>({});
+  const [rankingMonth, setRankingMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, "0"));
+  const [rankingYear, setRankingYear] = useState<string>(String(new Date().getFullYear()));
+  const [reportChartData, setReportChartData] = useState<
+    { round: number; resolved: number; unresolved: number }[] | null
+  >(null);
   const [prevUnresolved, setPrevUnresolved] = useState<QCItem[]>([]);
   const [prevResolutions, setPrevResolutions] = useState<Record<string, { id: string | null; solved: boolean; note: string }>>({});
   const prevResolutionsRef = useRef(prevResolutions);
@@ -147,30 +151,27 @@ export default function QualityControlPage() {
     (async () => {
       const { data: allSessions } = await supabase
         .from("quality_sessions")
-        .select("id, report_id, round_number, checklist, created_at, closed_at");
+        .select("id, report_id, round_number, checklist, status, created_at, closed_at");
 
       if (!allSessions) return;
 
       const branchMap = new Map(branches.map((b) => [b.id, b.name]));
-      const branchRoundResolved = new Map<string, Map<number, number>>();
-      const branchRoundUnresolved = new Map<string, Map<number, number>>();
+      const month = parseInt(rankingMonth, 10);
+      const year = parseInt(rankingYear, 10);
+
       const branchTotalResolved = new Map<string, number>();
       const branchTotalUnresolved = new Map<string, number>();
       const branchRounds = new Map<string, number>();
       const branchResolvedR1 = new Map<string, number>();
 
-      for (const s of allSessions as { report_id: string; round_number: number; checklist: QCItem[] | null }[]) {
+      for (const s of allSessions as { report_id: string; round_number: number; checklist: QCItem[] | null; created_at: string }[]) {
         const report = reports.find((r) => r.id === s.report_id);
         if (!report) continue;
+        const d = new Date(s.created_at);
+        if (d.getMonth() + 1 !== month || d.getFullYear() !== year) continue;
         const branch = branchMap.get(report.branch_id) ?? "Unknown";
-        if (!branchRoundResolved.has(branch)) branchRoundResolved.set(branch, new Map());
-        if (!branchRoundUnresolved.has(branch)) branchRoundUnresolved.set(branch, new Map());
         const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
         const unresolved = (s.checklist ?? []).filter((i) => i.answer === false).length;
-        const rMap = branchRoundResolved.get(branch)!;
-        const uMap = branchRoundUnresolved.get(branch)!;
-        rMap.set(s.round_number, (rMap.get(s.round_number) ?? 0) + resolved);
-        uMap.set(s.round_number, (uMap.get(s.round_number) ?? 0) + unresolved);
         branchTotalResolved.set(branch, (branchTotalResolved.get(branch) ?? 0) + resolved);
         branchTotalUnresolved.set(branch, (branchTotalUnresolved.get(branch) ?? 0) + unresolved);
         branchRounds.set(branch, Math.max(branchRounds.get(branch) ?? 0, s.round_number));
@@ -178,20 +179,6 @@ export default function QualityControlPage() {
           branchResolvedR1.set(branch, (branchResolvedR1.get(branch) ?? 0) + resolved);
         }
       }
-
-      const maxRound = Math.max(
-        1,
-        ...[...branchRoundResolved.values()].flatMap((m) => [...m.keys()]),
-      );
-      const data: { round: number; [branch: string]: number | string }[] = [];
-      for (let r = 1; r <= maxRound; r++) {
-        const row: { round: number; [branch: string]: number | string } = { round: r };
-        for (const [branch, rounds] of branchRoundResolved) {
-          row[branch] = rounds.get(r) ?? 0;
-        }
-        data.push(row);
-      }
-      setChartData(data);
 
       const rankings = [...branchTotalResolved.entries()].map(([name, resolved]) => {
         const unresolved = branchTotalUnresolved.get(name) ?? 0;
@@ -247,7 +234,9 @@ export default function QualityControlPage() {
             : "—";
           persistent.push({
             branch,
+            branchId: report.branch_id,
             reportTitle: report.title,
+            reportId: report.id,
             item: li.item,
             question: li.question,
             foundIssue: foundIssueText,
@@ -259,8 +248,19 @@ export default function QualityControlPage() {
         }
       }
       setPersistentUnresolved(persistent);
+
+      const { data: statusRows } = await supabase
+        .from("quality_persistent_status")
+        .select("branch_id, item, question, resolved");
+      if (statusRows) {
+        const map: Record<string, boolean> = {};
+        for (const row of statusRows as { branch_id: string; item: string; question: string; resolved: boolean }[]) {
+          map[`${row.branch_id}|${row.item}|${row.question}`] = row.resolved;
+        }
+        setPersistentStatuses(map);
+      }
     })();
-  }, [reports, branches]);
+  }, [reports, branches, rankingMonth, rankingYear]);
 
   useEffect(() => {
     if (!selectedReport) return;
@@ -270,7 +270,9 @@ export default function QualityControlPage() {
         .select("*")
         .eq("report_id", selectedReport.id)
         .order("round_number");
-      setSessions((data as QCSession[]) ?? []);
+      const sess = (data as QCSession[]) ?? [];
+      setSessions(sess);
+      loadReportChart(sess);
     })();
   }, [selectedReport?.id]);
 
@@ -385,6 +387,127 @@ export default function QualityControlPage() {
       year: "numeric",
     });
   const hasActiveSession = sessions.some((s) => s.status === "active");
+
+  function loadReportChart(reportSessions: QCSession[]) {
+    const rounds = reportSessions.filter((s) => s.checklist && s.checklist.length > 0);
+    if (rounds.length === 0) { setReportChartData(null); return; }
+    const data: { round: number; resolved: number; unresolved: number }[] = [];
+    for (const s of rounds) {
+      const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
+      const unresolved = (s.checklist ?? []).filter((i) => i.answer === false).length;
+      data.push({ round: s.round_number, resolved, unresolved });
+    }
+    setReportChartData(data.length > 0 ? data : null);
+  }
+
+  async function togglePersistentStatus(item: typeof persistentUnresolved[0], resolved: boolean) {
+    const key = `${item.branchId}|${item.item}|${item.question}`;
+    setPersistentStatuses((p) => ({ ...p, [key]: resolved }));
+    const existing = await supabase
+      .from("quality_persistent_status")
+      .select("id")
+      .eq("branch_id", item.branchId)
+      .eq("item", item.item)
+      .eq("question", item.question)
+      .maybeSingle();
+    if (existing.data) {
+      await supabase
+        .from("quality_persistent_status")
+        .update({ resolved, resolved_at: resolved ? new Date().toISOString() : null })
+        .eq("id", existing.data.id);
+    } else {
+      await supabase.from("quality_persistent_status").insert({
+        branch_id: item.branchId,
+        report_id: item.reportId,
+        item: item.item,
+        question: item.question,
+        resolved,
+        resolved_at: resolved ? new Date().toISOString() : null,
+      });
+    }
+  }
+
+  async function downloadPersistentPdf() {
+    const items = persistentUnresolved.filter((it) => {
+      const key = `${it.branchId}|${it.item}|${it.question}`;
+      return !persistentStatuses[key];
+    });
+    if (items.length === 0) { alert("No unresolved persistent issues to export."); return; }
+    const { jsPDF } = await import("jspdf");
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const MARGIN = 14;
+    const PAGE_W = 210;
+    const DARK: [number, number, number] = [22, 22, 30];
+    const ACCENT: [number, number, number] = [200, 30, 40];
+    const INK: [number, number, number] = [26, 26, 34];
+    const MUTED: [number, number, number] = [130, 130, 140];
+    let y = 20;
+
+    doc.setFillColor(...DARK);
+    doc.rect(0, 0, PAGE_W, 28, "F");
+    doc.setFillColor(...ACCENT);
+    doc.rect(0, 28, PAGE_W, 1.5, "F");
+    doc.setTextColor(247, 247, 250);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Persistent Unresolved Issues", MARGIN, 14);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated: ${todayStr()}`, MARGIN, 21);
+    y = 38;
+
+    const grouped = new Map<string, typeof items>();
+    for (const item of items) {
+      const list = grouped.get(item.branch) ?? [];
+      list.push(item);
+      grouped.set(item.branch, list);
+    }
+    for (const [branch, branchItems] of grouped) {
+      if (y > 260) { doc.addPage(); y = 20; }
+      doc.setFillColor(...INK);
+      doc.roundedRect(MARGIN, y - 4, PAGE_W - 2 * MARGIN, 8, 1, 1, "F");
+      doc.setTextColor(247, 247, 250);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(branch, MARGIN + 3, y + 1);
+      y += 12;
+
+      for (const item of branchItems) {
+        const lines: string[] = [];
+        lines.push(`Item: ${item.item}`);
+        lines.push(`Question: ${item.question}`);
+        lines.push(`Found: ${item.foundIssue}`);
+        lines.push(`Found in R${item.roundFound} — ${item.foundAt}`);
+        lines.push(`Last checked R${item.roundLast} — ${item.lastCheckedAt}`);
+        lines.push(`Report: ${item.reportTitle}`);
+        const estHeight = lines.length * 5 + 6;
+        if (y + estHeight > 270) { doc.addPage(); y = 20; }
+        doc.setFillColor(245, 245, 245);
+        doc.roundedRect(MARGIN, y - 2, PAGE_W - 2 * MARGIN, estHeight, 1, 1, "F");
+        doc.setDrawColor(220, 220, 220);
+        doc.roundedRect(MARGIN, y - 2, PAGE_W - 2 * MARGIN, estHeight, 1, 1, "S");
+        let ty = y + 3;
+        doc.setTextColor(...INK);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text(lines[0], MARGIN + 3, ty);
+        ty += 5;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...MUTED);
+        for (let i = 1; i < lines.length; i++) {
+          doc.text(lines[i], MARGIN + 3, ty);
+          ty += 5;
+        }
+        y += estHeight + 3;
+      }
+      y += 5;
+    }
+
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text(`QC Persistent Unresolved — ${todayStr()}`, MARGIN, 290);
+    doc.save("persistent-unresolved-issues.pdf");
+  }
 
   const prevSaveTimer = useRef<number | null>(null);
   const loadPrevUnresolved = useCallback(async (branchId: string, sessionId: string) => {
@@ -559,6 +682,7 @@ export default function QualityControlPage() {
       setPrevUnresolved([]);
       setPrevResolutions({});
     }
+    loadReportChart(sessions);
   }
 
   async function forceSaveDescriptions() {
@@ -945,13 +1069,26 @@ export default function QualityControlPage() {
                 {branches.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
               </select>
             </div>
-            {chartData && chartData.length > 0 && (
-              <LazyQCChart data={chartData} />
-            )}
             {branchRankings.length > 0 && (
               <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
-                <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Branch Rankings</h3>
-                <p className="mb-4 text-xs text-zinc-500">Ranked by resolution rate and speed of resolution</p>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Branch Rankings</h3>
+                    <p className="mt-0.5 text-xs text-zinc-500">Ranked by resolution rate and speed of resolution</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select value={rankingMonth} onChange={(e) => setRankingMonth(e.target.value)} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-2 py-1.5 text-xs text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-700">
+                      {["01","02","03","04","05","06","07","08","09","10","11","12"].map((m) => (
+                        <option key={m} value={m}>{new Date(2000, parseInt(m, 10) - 1).toLocaleString("en", { month: "long" })}</option>
+                      ))}
+                    </select>
+                    <select value={rankingYear} onChange={(e) => setRankingYear(e.target.value)} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-2 py-1.5 text-xs text-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-700">
+                      {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <div className="space-y-3">
                   {branchRankings.map((br) => (
                     <div key={br.name} className="flex items-center gap-4 rounded-lg border border-zinc-800/50 bg-zinc-900/40 p-4">
@@ -983,8 +1120,12 @@ export default function QualityControlPage() {
               </div>
             )}
             {persistentUnresolved.length > 0 && (() => {
+              const unresolvedOnly = persistentUnresolved.filter((it) => {
+                const key = `${it.branchId}|${it.item}|${it.question}`;
+                return !persistentStatuses[key];
+              });
               const branchGroups = new Map<string, typeof persistentUnresolved>();
-              for (const item of persistentUnresolved) {
+              for (const item of unresolvedOnly) {
                 const list = branchGroups.get(item.branch) ?? [];
                 list.push(item);
                 branchGroups.set(item.branch, list);
@@ -992,8 +1133,17 @@ export default function QualityControlPage() {
               const sortedBranches = [...branchGroups.keys()].sort();
               return (
                 <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
-                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Persistent Unresolved Issues</h3>
-                  <p className="mb-4 text-xs text-zinc-500">Issues found in round 1 that remain unresolved — not fixed after multiple rounds</p>
+                  <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">Persistent Unresolved Issues</h3>
+                      <p className="mt-0.5 text-xs text-zinc-500">Issues found in round 1 that remain unresolved — not fixed after multiple rounds</p>
+                    </div>
+                    {unresolvedOnly.length > 0 && (
+                      <button onClick={downloadPersistentPdf} className="rounded-lg border border-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-400 transition hover:bg-zinc-900/60 hover:text-zinc-200">
+                        Download PDF
+                      </button>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-2 mb-4">
                     {sortedBranches.map((b) => (
                       <button
@@ -1019,7 +1169,12 @@ export default function QualityControlPage() {
                               <p className="text-sm font-medium text-zinc-100">{item.item}</p>
                               <p className="text-xs text-zinc-400 mt-0.5">{item.question}</p>
                             </div>
-                            <span className="shrink-0 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">Unresolved</span>
+                            <button
+                              onClick={() => togglePersistentStatus(item, true)}
+                              className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 text-[10px] font-semibold uppercase text-white transition hover:bg-emerald-500"
+                            >
+                              Mark Done
+                            </button>
                           </div>
                           <p className="mt-2 text-xs text-zinc-500">Found: {item.foundIssue}</p>
                           <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-zinc-500">
@@ -1093,6 +1248,11 @@ export default function QualityControlPage() {
                 <button onClick={() => deleteReport(selectedReport.id)} className="rounded-lg border border-red-900 px-3 py-2 text-sm text-red-400 transition hover:bg-red-950">Delete</button>
               </div>
             </div>
+            {reportChartData && reportChartData.length > 0 && (
+              <div className="mb-6">
+                <LazyQCChart data={reportChartData.map((d) => ({ round: d.round, Resolved: d.resolved, Unresolved: d.unresolved }))} />
+              </div>
+            )}
             {sessions.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No rounds yet. Click &quot;Add Round&quot; to begin.
@@ -1267,6 +1427,86 @@ export default function QualityControlPage() {
                           </span>
                         )}
                       </div>
+                      {(item.photos && item.photos.length > 0) && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.photos.map((photo, pi) => (
+                            <div key={pi} className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={photo} alt={`Photo ${pi + 1}`} className="h-20 w-20 rounded-lg border border-zinc-700 object-cover" />
+                              {!isClosed && (
+                                <button
+                                  onClick={() => {
+                                    const updated = (selectedSession?.checklist ?? []).map((ci) =>
+                                      ci.id === item.id ? { ...ci, photos: (ci.photos ?? []).filter((_, i) => i !== pi) } : ci
+                                    );
+                                    setSelectedSession((prev) => prev ? { ...prev, checklist: updated } : prev);
+                                    setSessions((prev) => prev.map((s) => s.id === selectedSession?.id ? { ...s, checklist: updated } : s));
+                                    supabase.from("quality_sessions").update({ checklist: updated }).eq("id", selectedSession!.id);
+                                  }}
+                                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-600 bg-zinc-950 text-[10px] text-zinc-300 hover:text-white"
+                                >x</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!isClosed && (
+                        <div className="mt-3">
+                          <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 transition hover:border-zinc-500 hover:text-zinc-200">
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>
+                            Add Photo
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = async () => {
+                                  const img = new Image();
+                                  img.onload = async () => {
+                                    const canvas = document.createElement("canvas");
+                                    canvas.width = img.width;
+                                    canvas.height = img.height;
+                                    const ctx = canvas.getContext("2d")!;
+                                    ctx.drawImage(img, 0, 0);
+                                    const now = new Date();
+                                    const timestamp = now.toLocaleString("en-US", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      second: "2-digit",
+                                      hour12: true,
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    });
+                                    const fontSize = Math.max(16, Math.floor(img.width / 40));
+                                    ctx.font = `bold ${fontSize}px Arial`;
+                                    ctx.fillStyle = "rgba(0,0,0,0.6)";
+                                    const textW = ctx.measureText(timestamp).width;
+                                    ctx.fillRect(img.width - textW - fontSize * 2 - 10, img.height - fontSize - 20, textW + fontSize * 2 + 10, fontSize + 14);
+                                    ctx.fillStyle = "#ffffff";
+                                    ctx.fillText(timestamp, img.width - textW - fontSize, img.height - 12);
+                                    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                                    const photos = [...(item.photos ?? []), dataUrl];
+                                    const updated = (selectedSession?.checklist ?? []).map((ci) =>
+                                      ci.id === item.id ? { ...ci, photos } : ci
+                                    );
+                                    setSelectedSession((prev) => prev ? { ...prev, checklist: updated } : prev);
+                                    setSessions((prev) => prev.map((s) => s.id === selectedSession?.id ? { ...s, checklist: updated } : s));
+                                    await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", selectedSession!.id);
+                                  };
+                                  img.src = reader.result as string;
+                                };
+                                reader.readAsDataURL(file);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

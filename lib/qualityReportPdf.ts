@@ -14,6 +14,7 @@ export type QualityReportPdfData = {
       question: string;
       found_issue: string;
       answer?: boolean;
+      photos?: string[];
     }>;
   }>;
 };
@@ -298,6 +299,24 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
           }
 
           y += rowHCalc;
+
+          // Render photos for this checklist item
+          const itemPhotos = (item as { photos?: string[] }).photos;
+          if (itemPhotos && itemPhotos.length > 0) {
+            for (const photo of itemPhotos) {
+              try {
+                const imgW = 45;
+                const imgH = 35;
+                ensure(imgH + 8);
+                doc.addImage(photo, "JPEG", MARGIN + 2, y, imgW, imgH);
+                doc.setDrawColor(...BORDER);
+                doc.rect(MARGIN + 2, y, imgW, imgH, "S");
+                y += imgH + 4;
+              } catch {
+                // skip invalid image
+              }
+            }
+          }
         }
 
         // Table outer border

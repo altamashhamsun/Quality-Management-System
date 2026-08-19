@@ -25,6 +25,7 @@ type QCSession = {
     question: string;
     found_issue: string;
     answer?: boolean;
+    photos?: string[];
   }> | null;
   created_at: string;
 };
@@ -238,7 +239,7 @@ export default function PublicQualityControlPage() {
                     {s.round_number > 1 && (s.checklist ?? []).length > 0 && (
                       <div className="mt-3 flex flex-col gap-2">
                         {(s.checklist ?? []).map((item) => (
-                          <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                            <div key={item.id} className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-medium text-zinc-200">{item.item}</p>
@@ -254,6 +255,14 @@ export default function PublicQualityControlPage() {
                                 </span>
                               )}
                             </div>
+                            {item.photos && item.photos.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {item.photos.map((photo, pi) => (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img key={pi} src={photo} alt={`Photo ${pi + 1}`} className="h-20 w-20 rounded-lg border border-zinc-700 object-cover" />
+                                ))}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
