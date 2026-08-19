@@ -9,6 +9,7 @@ import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
 import AuditorTab from "./AuditorTab";
 import AuditReportTab from "./AuditReportTab";
+import BranchRankingTab from "./BranchRankingTab";
 
 // The page is driven by query params (tab=auditor, branch, dept) so a
 // specific view can be deep-linked. The content that reads searchParams is
@@ -33,6 +34,8 @@ const TABS = [
   { key: "capa", label: "Corrective & Preventive Action", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "auditor", label: "Auditor", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
   { key: "auditReport", label: "Audit Report", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
+  { key: "branchMonth", label: "Branch of the Month", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
+  { key: "branchYear", label: "Branch of the Year", activeClass: "border-zinc-300 bg-zinc-100 text-zinc-950" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -363,7 +366,7 @@ function AuditContent() {
               Manage audit plans, corrective & preventive actions, and generate audit reports
             </p>
           </div>
-          {activeTab !== "auditor" && activeTab !== "auditReport" && (
+          {activeTab !== "auditor" && activeTab !== "auditReport" && activeTab !== "branchMonth" && activeTab !== "branchYear" && (
             <button
               onClick={openCreate}
               className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-300 hover:border-zinc-300 hover:bg-zinc-800"
@@ -388,7 +391,7 @@ function AuditContent() {
                 }`}
               >
                 {tab.label}
-                {tab.key !== "auditor" && tab.key !== "auditReport" && (
+                {tab.key !== "auditor" && tab.key !== "auditReport" && tab.key !== "branchMonth" && tab.key !== "branchYear" && (
                   <span className="ml-2 rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-500">
                     {count}
                   </span>
@@ -402,6 +405,10 @@ function AuditContent() {
           <AuditorTab branchId={branchParam} deptId={deptParam} />
         ) : activeTab === "auditReport" ? (
           <AuditReportTab />
+        ) : activeTab === "branchMonth" ? (
+          <BranchRankingTab mode="month" />
+        ) : activeTab === "branchYear" ? (
+          <BranchRankingTab mode="year" />
         ) : dataLoading ? (
           <p className="text-sm text-zinc-500">Loading...</p>
         ) : activeDocuments.length === 0 ? (
