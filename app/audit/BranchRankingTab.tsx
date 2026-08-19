@@ -24,12 +24,27 @@ type IncidentRow = {
   resolved_at: string | null;
 };
 
+type QCReportRow = {
+  id: string;
+  branch_id: string;
+};
+
+type QCSessionRow = {
+  id: string;
+  report_id: string;
+  created_at: string;
+  checklist: { item: string; question: string; found_issue: string; answer?: boolean }[] | null;
+};
+
 type BranchStat = {
   branch: string;
   total: number;
   resolved: number;
   unresolved: number;
   pct: number;
+  ncrs: number;
+  incidents: number;
+  qc: number;
 };
 
 const MONTHS = [
@@ -51,6 +66,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [loading, setLoading] = useState(true);
   const [branchStats, setBranchStats] = useState<BranchStat[]>([]);
+  const [includeQc, setIncludeQc] = useState(true);
 
   const years = Array.from({ length: 10 }, (_, i) => now.getFullYear() - i);
 
@@ -71,7 +87,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           ? new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString()
           : new Date(selectedYear, 11, 31, 23, 59, 59).toISOString();
 
-      const [ncrsResult, incidentsResult] = await Promise.all([
+      const baseQueries = [
         supabase
           .from("ncr_records")
           .select("id, status, opening_ncs, closing_ncs, created_at, departments(name, branches(name))")
@@ -82,36 +98,79 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           .select("id, status, branch_name, created_at, resolved_at")
           .gte("created_at", startDate)
           .lte("created_at", endDate),
-      ]);
+      ];
+
+      const qcQueries = includeQc ? [
+        supabase.from("quality_reports").select("id, branch_id"),
+        supabase
+          .from("quality_sessions")
+          .select("id, report_id, checklist, created_at")
+          .gte("created_at", startDate)
+          .lte("created_at", endDate),
+        supabase.from("branches").select("id, name"),
+      ] : [];
+
+      const results = await Promise.all([...baseQueries, ...qcQueries]);
+      const ncrsResult = results[0] as { data: NcrRow[] | null };
+      const incidentsResult = results[1] as { data: IncidentRow[] | null };
 
       const map = new Map<string, BranchStat>();
 
-      for (const r of (ncrsResult.data ?? []) as NcrRow[]) {
+      function getStat(branch: string): BranchStat {
+        let stat = map.get(branch);
+        if (!stat) {
+          stat = { branch, total: 0, resolved: 0, unresolved: 0, pct: 0, ncrs: 0, incidents: 0, qc: 0 };
+          map.set(branch, stat);
+        }
+        return stat;
+      }
+
+      for (const r of (ncrsResult.data ?? [])) {
         const branch = extractBranchName(r.departments) ?? "Other";
         const resolved =
           r.status === "Done" ||
           (r.closing_ncs != null && r.closing_ncs > 0);
-        let stat = map.get(branch);
-        if (!stat) {
-          stat = { branch, total: 0, resolved: 0, unresolved: 0, pct: 0 };
-          map.set(branch, stat);
-        }
+        const stat = getStat(branch);
         stat.total += 1;
+        stat.ncrs += 1;
         if (resolved) stat.resolved += 1;
         else stat.unresolved += 1;
       }
 
-      for (const r of (incidentsResult.data ?? []) as IncidentRow[]) {
+      for (const r of (incidentsResult.data ?? [])) {
         const branch = r.branch_name ?? "Other";
         const resolved = isResolved(r);
-        let stat = map.get(branch);
-        if (!stat) {
-          stat = { branch, total: 0, resolved: 0, unresolved: 0, pct: 0 };
-          map.set(branch, stat);
-        }
+        const stat = getStat(branch);
         stat.total += 1;
+        stat.incidents += 1;
         if (resolved) stat.resolved += 1;
         else stat.unresolved += 1;
+      }
+
+      if (includeQc && results.length >= 5) {
+        const qcReportsResult = results[2] as { data: QCReportRow[] | null };
+        const qcSessionsResult = results[3] as { data: QCSessionRow[] | null };
+        const branchesResult = results[4] as { data: { id: string; name: string }[] | null };
+
+        const branchIdToName = new Map<string, string>();
+        for (const b of branchesResult?.data ?? []) branchIdToName.set(b.id, b.name);
+        const reportToBranch = new Map<string, string>();
+        for (const r of qcReportsResult?.data ?? []) reportToBranch.set(r.id, r.branch_id);
+
+        for (const s of qcSessionsResult?.data ?? []) {
+          const branchId = reportToBranch.get(s.report_id);
+          if (!branchId) continue;
+          const branch = branchIdToName.get(branchId) ?? "Unknown QC";
+          for (const item of s.checklist ?? []) {
+            if (!item.found_issue) continue;
+            const resolved = item.answer === true;
+            const stat = getStat(branch);
+            stat.total += 1;
+            stat.qc += 1;
+            if (resolved) stat.resolved += 1;
+            else stat.unresolved += 1;
+          }
+        }
       }
 
       const stats = [...map.values()].map((s) => ({
@@ -123,7 +182,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
       setBranchStats(stats);
       setLoading(false);
     })();
-  }, [mode, selectedMonth, selectedYear]);
+  }, [mode, selectedMonth, selectedYear, includeQc]);
 
   const bestBranch = branchStats[0] ?? null;
 
@@ -136,7 +195,21 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           </h3>
           <p className="text-xs text-zinc-500">{periodLabel} &mdash; ranked by issue resolution rate</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIncludeQc((v) => !v)}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-zinc-800 transition-colors">
+              <span
+                className={`inline-block h-3 w-3 rounded-full bg-zinc-400 transition-transform ${
+                  includeQc ? "translate-x-3.5 bg-amber-400" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+            <span>QC Issues</span>
+          </button>
           {mode === "month" && (
             <select
               value={selectedMonth}
@@ -168,19 +241,23 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
         </p>
       ) : (
         <>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
+          <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-2xl font-bold text-zinc-50">{bestBranch.branch}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {bestBranch.resolved} of {bestBranch.total} issues resolved ({bestBranch.pct}%)
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                  {mode === "month" ? "Monthly Champion" : "Yearly Champion"}
+                </p>
+                <p className="mt-2 text-3xl font-bold text-zinc-50">{bestBranch.branch}</p>
+                <p className="mt-1 text-sm text-zinc-400">
+                  {bestBranch.resolved} of {bestBranch.total} issues resolved
                 </p>
               </div>
-              <span className="rounded border border-amber-600 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-400">
-                {mode === "month" ? "Monthly Champion" : "Yearly Champion"}
-              </span>
+              <div className="text-right">
+                <p className="text-4xl font-bold text-amber-400">{bestBranch.pct}%</p>
+                <p className="mt-1 text-xs text-zinc-500">resolution rate</p>
+              </div>
             </div>
-            <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-zinc-800">
               <div
                 className="h-full rounded-full bg-amber-400"
                 style={{ width: `${bestBranch.pct}%` }}
@@ -188,51 +265,57 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {branchStats.map((b, i) => (
               <div
                 key={b.branch}
-                className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3"
+                className={`rounded-xl border p-4 transition-all ${
+                  i === 0
+                    ? "border-amber-700/50 bg-amber-950/20"
+                    : "border-zinc-800 bg-zinc-950/60"
+                }`}
               >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                  style={{
-                    backgroundColor: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#27272a",
-                    color: i < 3 ? "#000" : "#71717a",
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-zinc-100">{b.branch}</span>
-                    {i === 0 && (
-                      <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-400">
-                        Best
-                      </span>
-                    )}
-                    {i === branchStats.length - 1 && branchStats.length > 1 && (
-                      <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-red-400">
-                        Needs Improvement
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 flex items-center gap-4 text-xs text-zinc-500">
-                    <span>{b.resolved}/{b.total} resolved</span>
-                    <span>&middot;</span>
-                    <span>{b.pct}%</span>
-                    <span>&middot;</span>
-                    <span>{b.unresolved} unresolved</span>
-                  </div>
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-                    <div
-                      className="h-full rounded-full transition-all"
+                    <span
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
                       style={{
-                        width: `${b.pct}%`,
-                        backgroundColor: b.pct >= 80 ? "#16a34a" : b.pct >= 50 ? "#d97706" : "#dc2626",
+                        backgroundColor: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#27272a",
+                        color: i < 3 ? "#000" : "#71717a",
                       }}
-                    />
+                    >
+                      {i + 1}
+                    </span>
+                    <span className="text-sm font-semibold text-zinc-100">{b.branch}</span>
                   </div>
+                  <span className="text-2xl font-bold text-zinc-50">{b.pct}%</span>
+                </div>
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${b.pct}%`,
+                      backgroundColor: b.pct >= 80 ? "#16a34a" : b.pct >= 50 ? "#d97706" : "#dc2626",
+                    }}
+                  />
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-lg font-semibold text-zinc-100">{b.ncrs}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">NCRs</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-zinc-100">{b.incidents}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Incidents</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-zinc-100">{b.qc}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">QC</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
+                  <span className="text-emerald-400">{b.resolved} resolved</span>
+                  <span className="text-red-400">{b.unresolved} unresolved</span>
                 </div>
               </div>
             ))}
