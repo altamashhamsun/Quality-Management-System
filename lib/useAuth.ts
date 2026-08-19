@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "./supabase";
 
-export function useAuth() {
+export function useAuth({ redirect = true } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export function useAuth() {
         } else {
           setEmail(null);
           setLoading(false);
-          router.replace("/");
+          if (redirect) router.replace("/");
         }
       },
     );
@@ -33,7 +33,7 @@ export function useAuth() {
         setLoading(false);
       } else {
         setLoading(false);
-        router.replace("/");
+        if (redirect) router.replace("/");
       }
     });
 
@@ -41,7 +41,7 @@ export function useAuth() {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, redirect]);
 
   return { email, loading };
 }

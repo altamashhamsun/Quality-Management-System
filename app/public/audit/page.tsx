@@ -1,19 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  downloadAuditReportPdf,
-  type AuditReportPdfData,
-  type ReportIncident,
-  type ReportNc,
-} from "@/lib/auditReportPdf";
-import type { NcrRecord } from "@/lib/ncr";
-import { isResolved, severityLabel, type IncidentRecord } from "@/lib/incident";
+import AuditorTab from "@/app/audit/AuditorTab";
+import AuditReportTab from "@/app/audit/AuditReportTab";
+import BranchRankingTab from "@/app/audit/BranchRankingTab";
 
-type DocRow = {
+type AuditDocument = {
   id: string;
-  category: string;
+  category: "plan" | "report" | "capa";
   title: string;
   description: string | null;
   content: Record<string, string> | null;
@@ -21,401 +16,231 @@ type DocRow = {
   end_date: string | null;
   department_ids: string[];
   plan_id: string | null;
+  created_at: string;
 };
 
-type Department = {
+const TABS = [
+  { key: "plan", label: "Audit Plans" },
+  { key: "capa", label: "Corrective & Preventive Action" },
+  { key: "auditor", label: "Auditor" },
+  { key: "auditReport", label: "Audit Report" },
+  { key: "branchMonth", label: "Branch of the Month" },
+  { key: "branchYear", label: "Branch of the Year" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+const PLAN_SECTIONS: { key: string; label: string }[] = [
+  { key: "objectives", label: "Objectives" },
+  { key: "scope", label: "Scope" },
+  { key: "criteria", label: "Criteria" },
+  { key: "risk_assessment", label: "Risk Assessment" },
+  { key: "procedures", label: "Procedures" },
+  { key: "timeline", label: "Timeline" },
+  { key: "team_resources", label: "Team & Resources" },
+];
+
+type PlanDepartment = {
   id: string;
   name: string;
   branches: { name: string } | { name: string }[] | null;
 };
 
-const EXCEL_EPOCH_OFFSET = 25569;
-
-function excelSerialToDate(serial: number): Date {
-  return new Date(Math.round((serial - EXCEL_EPOCH_OFFSET) * 86400000));
-}
-
-function dateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function formatDateRange(start: string, end: string): string {
-  const opts: Intl.DateTimeFormatOptions = {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  };
-  return `${new Date(start + "T00:00:00").toLocaleDateString(undefined, opts)} — ${new Date(end + "T00:00:00").toLocaleDateString(undefined, opts)}`;
-}
-
-function formatExcelDate(serial: number | null): string {
-  if (serial == null) return "—";
-  return excelSerialToDate(serial).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-export default function PublicAuditPage() {
-  const [docs, setDocs] = useState<DocRow[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [records, setRecords] = useState<NcrRecord[]>([]);
-  const [incidents, setIncidents] = useState<IncidentRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function PublicAuditContent() {
+  const [activeTab, setActiveTab] = useState<TabKey>("plan");
+  const [documents, setDocuments] = useState<AuditDocument[]>([]);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [departments, setDepartments] = useState<PlanDepartment[]>([]);
+  const [viewing, setViewing] = useState<AuditDocument | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [docsResult, deptsResult, recordsResult, incidentsResult] = await Promise.all([
-        supabase.from("audit_documents").select("*"),
+      const [docsResult, deptsResult] = await Promise.all([
+        supabase
+          .from("audit_documents")
+          .select("*")
+          .order("created_at", { ascending: true }),
         supabase.from("departments").select("id, name, branches(name)"),
-        supabase.from("ncr_records").select("*"),
-        supabase.from("incidents").select("*"),
       ]);
-      if (!docsResult.error) setDocs((docsResult.data ?? []) as DocRow[]);
+      if (!docsResult.error) setDocuments((docsResult.data ?? []) as AuditDocument[]);
       if (!deptsResult.error) setDepartments(deptsResult.data ?? []);
-      if (!recordsResult.error) setRecords(recordsResult.data ?? []);
-      if (!incidentsResult.error) setIncidents(incidentsResult.data ?? []);
-      setLoading(false);
+      setDataLoading(false);
     })();
   }, []);
 
-  const reports = useMemo(() => docs.filter((d) => d.category === "report"), [docs]);
-  const capas = useMemo(() => docs.filter((d) => d.category === "capa"), [docs]);
+  const activeDocuments = documents.filter((doc) => doc.category === activeTab);
 
-  const deptMeta = useMemo(() => {
-    const map = new Map<string, { name: string; branch: string }>();
-    for (const dept of departments) {
-      const branch = Array.isArray(dept.branches)
-        ? (dept.branches[0]?.name ?? "Other")
-        : (dept.branches?.name ?? "Other");
-      map.set(dept.id, { name: dept.name, branch });
-    }
-    return map;
+  const deptName = useMemo(() => {
+    const map = new Map(departments.map((d) => [d.id, d.name]));
+    return (id: string) => map.get(id) ?? "Unknown";
   }, [departments]);
 
-  const ncRows = useMemo(
-    () =>
-      records
-        .filter((r) => (r.corrective_action ?? "").trim() !== "" || (r.preventive_action ?? "").trim() !== "")
-        .map((r) => ({
-          ncrNumber: r.ncr_number ?? "NCR",
-          branch: r.branch ?? "—",
-          departmentName: r.department_id ? (deptMeta.get(r.department_id)?.name ?? "—") : "—",
-          priority: r.priority ?? "—",
-          status: r.status ?? "—",
-          correctiveAction: r.corrective_action ?? "",
-          preventiveAction: r.preventive_action ?? "",
-          rootCause: r.root_cause ?? "",
-        }))
-        .sort((a, b) => a.ncrNumber.localeCompare(b.ncrNumber)),
-    [records, deptMeta],
-  );
-
-  const scopeIncidents = useCallback(
-    (report: DocRow): IncidentRecord[] => {
-      if (!report.start_date || !report.end_date) return [];
-      const narrative = report.content ?? {};
-      const auditDate = narrative.audit_date ?? "";
-      const branchFilter = new Set<string>();
-      for (const id of report.department_ids) {
-        const meta = deptMeta.get(id);
-        if (meta) branchFilter.add(meta.branch);
-      }
-      return incidents.filter((r) => {
-        if (!r.occurred_at || isResolved(r)) return false;
-        const key = dateKey(new Date(r.occurred_at));
-        if (auditDate) {
-          if (key !== auditDate) return false;
-        } else {
-          if (key < report.start_date! || key > report.end_date!) return false;
-        }
-        if (branchFilter.size > 0 && !branchFilter.has(r.branch_name ?? "")) return false;
-        return true;
-      });
-    },
-    [incidents, deptMeta],
-  );
-
-  const incidentCounts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const report of reports) {
-      map.set(report.id, scopeIncidents(report).length);
-    }
-    return map;
-  }, [reports, scopeIncidents]);
-
-  async function downloadReport(report: DocRow) {
-    if (!report.start_date || !report.end_date) return;
-    setPdfBusy(report.id);
-    setError(null);
-    try {
-      const narrative = report.content ?? {};
-      const auditDate = narrative.audit_date ?? "";
-
-      const branchFilter = new Set<string>();
-      for (const id of report.department_ids) {
-        const meta = deptMeta.get(id);
-        if (meta) branchFilter.add(meta.branch);
-      }
-
-      const scopedRecords = records.filter((r) => {
-        if (r.opening_ncs == null) return false;
-        const key = dateKey(excelSerialToDate(r.opening_ncs));
-        if (auditDate) {
-          if (key !== auditDate) return false;
-        } else {
-          if (key < report.start_date! || key > report.end_date!) return false;
-        }
-        if (branchFilter.size > 0 && !branchFilter.has(r.branch ?? "")) return false;
-        return true;
-      });
-
-      const isMajor = (r: NcrRecord) =>
-        r.priority === "Urgent" || r.priority === "High";
-
-      const buildRow = (r: NcrRecord): ReportNc => ({
-        ncrNumber: r.ncr_number ?? "NCR",
-        description: r.description ?? "—",
-        clause: r.clause ?? "—",
-        priority: r.priority ?? "—",
-        correctiveAction: r.corrective_action ?? "",
-        preventiveAction: r.preventive_action ?? "",
-        rootCause: r.root_cause ?? "",
-        consequences: r.consequences ?? "",
-        responsibility: r.hod_name ?? r.branch_manager ?? "—",
-        deadline: formatExcelDate(r.closing_ncs),
-      });
-
-      const majorNcs = scopedRecords.filter(isMajor).map(buildRow);
-      const minorNcs = scopedRecords.filter((r) => !isMajor(r)).map(buildRow);
-
-      const criteria = new Set<string>();
-      for (const r of scopedRecords) {
-        if (!r.guideline) continue;
-        const standard = r.guideline.split(" – ")[0].trim();
-        if (standard) criteria.add(standard);
-      }
-
-      const locations = new Set<string>();
-      for (const id of report.department_ids) {
-        const meta = deptMeta.get(id);
-        if (meta) locations.add(meta.branch);
-      }
-      for (const r of scopedRecords) if (r.branch) locations.add(r.branch);
-
-      const incidentRows: ReportIncident[] = scopeIncidents(report).map((r) => ({
-        incidentId: r.incident_id ?? `INC-${r.id.slice(0, 6).toUpperCase()}`,
-        title: r.title ?? "—",
-        incidentType: r.incident_type ?? "—",
-        severity: severityLabel(r.severity),
-        branch: r.branch_name ?? "—",
-        department: r.department_name ?? "—",
-        occurredAt: dateKey(new Date(r.occurred_at!)),
-        description: r.description ?? "",
-      }));
-
-      const photos: string[] = [];
-      for (const r of scopedRecords) {
-        if (photos.length >= 12) break;
-        for (const url of r.pictures ?? []) {
-          if (photos.length >= 12) break;
-          try {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(blob);
-            });
-            photos.push(dataUrl);
-          } catch {
-            photos.push(url);
-          }
-        }
-      }
-
-      const data: AuditReportPdfData = {
-        title: report.title,
-        reference:
-          narrative.reference_id?.trim() ||
-          `AUD-${report.plan_id?.slice(0, 6).toUpperCase() ?? report.id.slice(0, 6).toUpperCase()}`,
-        location: [...locations].join(", ") || "—",
-        dateRange: auditDate
-          ? new Date(auditDate + "T00:00:00").toLocaleDateString(undefined, {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })
-          : formatDateRange(report.start_date, report.end_date),
-        auditors: narrative.auditors?.trim() || "—",
-        leadAuditees: narrative.lead_auditees?.trim() || "—",
-        overallAssessment: narrative.overall_assessment?.trim() || "",
-        keyFindings: narrative.key_findings?.trim() || "",
-        scope: narrative.scope?.trim() || "",
-        criteria: [...criteria],
-        methodology: narrative.methodology?.trim() || "",
-        conformances: narrative.conformances?.trim() || "",
-        majorNcs,
-        minorNcs,
-        incidents: incidentRows,
-        qcIssues: [],
-        photos,
-      };
-      downloadAuditReportPdf(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate PDF.");
-    } finally {
-      setPdfBusy(null);
-    }
-  }
-
-  if (loading) {
-    return <p className="text-sm text-zinc-500">Loading audit documents...</p>;
+  function formatDateRange(doc: AuditDocument): string {
+    if (!doc.start_date || !doc.end_date) return "";
+    const opts: Intl.DateTimeFormatOptions = {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    };
+    return `${new Date(doc.start_date + "T00:00:00").toLocaleDateString(undefined, opts)} — ${new Date(doc.end_date + "T00:00:00").toLocaleDateString(undefined, opts)}`;
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-xl font-semibold text-zinc-50">Audit</h2>
         <p className="mt-1 text-sm text-zinc-500">
-          Audit reports and corrective &amp; preventive actions — read only
+          Audit plans, corrective &amp; preventive actions, and reports — read only
         </p>
       </div>
 
-      {error && (
-        <p className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300">
-          {error}
+      <div className="flex flex-wrap gap-2">
+        {TABS.map((tab) => {
+          const active = tab.key === activeTab;
+          const count = tab.key !== "auditor" && tab.key !== "auditReport" && tab.key !== "branchMonth" && tab.key !== "branchYear"
+            ? documents.filter((doc) => doc.category === tab.key).length
+            : null;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all duration-300 ${
+                active
+                  ? "border-zinc-300 bg-zinc-100 text-zinc-950"
+                  : "border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+              }`}
+            >
+              {tab.label}
+              {count !== null && (
+                <span className="ml-2 rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-500">
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "auditor" ? (
+        <AuditorTab />
+      ) : activeTab === "auditReport" ? (
+        <AuditReportTab />
+      ) : activeTab === "branchMonth" ? (
+        <BranchRankingTab mode="month" />
+      ) : activeTab === "branchYear" ? (
+        <BranchRankingTab mode="year" />
+      ) : dataLoading ? (
+        <p className="text-sm text-zinc-500">Loading...</p>
+      ) : activeDocuments.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+          No {TABS.find((t) => t.key === activeTab)?.label.toLowerCase()} published yet.
         </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {activeDocuments.map((doc) => (
+            <div
+              key={doc.id}
+              className="group rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 transition-all duration-300 hover:border-zinc-700 hover:bg-zinc-900/40"
+            >
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <h3 className="text-sm font-semibold text-zinc-50">
+                  {doc.title}
+                </h3>
+                <span className="shrink-0 rounded bg-zinc-900 px-2 py-0.5 text-[10px] uppercase tracking-wide text-zinc-500">
+                  {doc.category === "plan" && doc.start_date
+                    ? formatDateRange(doc)
+                    : new Date(doc.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              {doc.description && (
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  {doc.description.length > 160
+                    ? doc.description.slice(0, 160) + "..."
+                    : doc.description}
+                </p>
+              )}
+              {doc.category === "plan" && doc.department_ids.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {doc.department_ids.map((id) => (
+                    <span
+                      key={id}
+                      className="rounded border border-zinc-800 bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-400"
+                    >
+                      {deptName(id)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() => setViewing(doc)}
+                  className="rounded-lg border border-zinc-700 px-2.5 py-1.5 text-xs text-zinc-300 transition-colors hover:border-zinc-300 hover:text-white"
+                >
+                  View
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      <section>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Audit Reports
-        </h3>
-        {reports.length === 0 ? (
-          <p className="text-sm text-zinc-500">No audit reports published yet.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {reports.map((report) => (
-              <div
-                key={report.id}
-                className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
+      {viewing && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setViewing(null)}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <h3 className="text-lg font-semibold text-zinc-50">{viewing.title}</h3>
+              <button
+                onClick={() => setViewing(null)}
+                className="shrink-0 rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-white"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-zinc-100">
-                      {report.title}
-                    </h4>
-                    {report.description && (
-                      <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                        {report.description}
-                      </p>
-                    )}
-                    {(incidentCounts.get(report.id) ?? 0) > 0 && (
-                      <p className="mt-2 text-[11px] font-medium text-red-400/90">
-                        {incidentCounts.get(report.id)} unresolved incident(s) in scope
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => downloadReport(report)}
-                    disabled={pdfBusy === report.id}
-                    className="rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-xs font-medium text-zinc-100 transition-colors hover:bg-zinc-700 disabled:opacity-50"
-                  >
-                    {pdfBusy === report.id ? "Preparing PDF..." : "Download Report PDF"}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Corrective &amp; Preventive Action Plans
-        </h3>
-        {capas.length === 0 ? (
-          <p className="text-sm text-zinc-500">No corrective/preventive action plans yet.</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {capas.map((capa) => (
-              <div
-                key={capa.id}
-                className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4"
-              >
-                <h4 className="text-sm font-semibold text-zinc-100">{capa.title}</h4>
-                {capa.description && (
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                    {capa.description}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Corrective &amp; Preventive Actions (from NCRs)
-        </h3>
-        {ncRows.length === 0 ? (
-          <p className="text-sm text-zinc-500">No corrective/preventive actions recorded.</p>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/60">
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-800 bg-zinc-900/40">
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      NCR #
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      Branch
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      Dept
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      Priority
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      Corrective Action
-                    </th>
-                    <th className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                      Preventive Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ncRows.map((r) => (
-                    <tr key={r.ncrNumber} className="border-b border-zinc-800/60 align-top last:border-0">
-                      <td className="px-2 py-2 font-mono text-zinc-200">{r.ncrNumber}</td>
-                      <td className="px-2 py-2 text-zinc-400">{r.branch}</td>
-                      <td className="px-2 py-2 text-zinc-400">{r.departmentName}</td>
-                      <td className="px-2 py-2 text-zinc-400">{r.priority}</td>
-                      <td className="min-w-[16rem] px-2 py-2 text-zinc-300">
-                        {r.correctiveAction || "—"}
-                      </td>
-                      <td className="min-w-[16rem] px-2 py-2 text-zinc-300">
-                        {r.preventiveAction || "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                Close
+              </button>
             </div>
+            {viewing.category === "plan" && viewing.content ? (
+              <div className="flex flex-col gap-5">
+                {PLAN_SECTIONS.map((section) => {
+                  const html = viewing.content?.[section.key] ?? "";
+                  return (
+                    <div key={section.key}>
+                      <h4 className="mb-1.5 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                        {section.label}
+                      </h4>
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3">
+                        {html ? (
+                          <div
+                            className="prose-xs rte-body text-sm text-zinc-200"
+                            dangerouslySetInnerHTML={{ __html: html }}
+                          />
+                        ) : (
+                          <p className="text-sm text-zinc-600">—</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="whitespace-pre-line text-sm text-zinc-300">
+                {viewing.description ?? "\u2014"}
+              </p>
+            )}
           </div>
-        )}
-      </section>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function PublicAuditPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-zinc-500">Loading...</p>}>
+      <PublicAuditContent />
+    </Suspense>
   );
 }

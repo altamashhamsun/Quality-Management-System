@@ -92,8 +92,8 @@ const emptyNarrative = {
   conformances: "",
 };
 
-export default function AuditReportTab() {
-  const { loading } = useAuth();
+export default function AuditReportTab({ readonly = false }: { readonly?: boolean }) {
+  const { loading } = useAuth({ redirect: !readonly });
   const [plans, setPlans] = useState<PlanDoc[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [records, setRecords] = useState<NcrRecord[]>([]);
@@ -300,7 +300,7 @@ export default function AuditReportTab() {
 
   // Autosave the audit report narrative to Supabase so work is never lost.
   useEffect(() => {
-    if (!selectedPlan || dataLoading) return;
+    if (readonly || !selectedPlan || dataLoading) return;
     const hasContent = Object.entries(narrative).some(
       ([k, v]) => v.trim() && k !== "reference_id",
     );
@@ -571,8 +571,9 @@ export default function AuditReportTab() {
                       type="text"
                       value={narrative.reference_id}
                       onChange={(e) => setField("reference_id", e.target.value)}
+                      readOnly={readonly}
                       placeholder={`AUD-${selectedPlan.id.slice(0, 6).toUpperCase()}`}
-                      className={inputClass}
+                      className={`${inputClass} ${readonly ? "opacity-70" : ""}`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
@@ -599,12 +600,15 @@ export default function AuditReportTab() {
                       type="date"
                       value={narrative.audit_date}
                       onChange={(e) => setField("audit_date", e.target.value)}
-                      className={`${inputClass} [color-scheme:dark]`}
+                      readOnly={readonly}
+                      className={`${inputClass} [color-scheme:dark] ${readonly ? "opacity-70" : ""}`}
                     />
-                    <span className="text-[11px] text-zinc-500">
-                      NCRs opened on this date in the plan&apos;s branches are the
-                      records for this audit.
-                    </span>
+                    {!readonly && (
+                      <span className="text-[11px] text-zinc-500">
+                        NCRs opened on this date in the plan&apos;s branches are the
+                        records for this audit.
+                      </span>
+                    )}
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
                     Auditor(s)
@@ -612,8 +616,9 @@ export default function AuditReportTab() {
                       type="text"
                       value={narrative.auditors}
                       onChange={(e) => setField("auditors", e.target.value)}
+                      readOnly={readonly}
                       placeholder="e.g. A. Sharma, R. Verma"
-                      className={inputClass}
+                      className={`${inputClass} ${readonly ? "opacity-70" : ""}`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
@@ -622,8 +627,9 @@ export default function AuditReportTab() {
                       type="text"
                       value={narrative.lead_auditees}
                       onChange={(e) => setField("lead_auditees", e.target.value)}
+                      readOnly={readonly}
                       placeholder="e.g. B. Mehta (Kitchen Manager)"
-                      className={inputClass}
+                      className={`${inputClass} ${readonly ? "opacity-70" : ""}`}
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium text-zinc-300">
@@ -638,34 +644,61 @@ export default function AuditReportTab() {
                 </div>
               </ReportSection>
 
-              <NarrativeBox
-                title="Overall Assessment"
-                hint="e.g. Compliant, Needs Improvement, Non-Compliant"
-                value={narrative.overall_assessment}
-                onChange={(v) => setField("overall_assessment", v)}
-                rows={3}
-              />
-              <NarrativeBox
-                title="Key Findings Highlights"
-                hint="Brief summary for executive management: critical risk areas and major wins"
-                value={narrative.key_findings}
-                onChange={(v) => setField("key_findings", v)}
-                rows={4}
-              />
-              <NarrativeBox
-                title="Audit Scope"
-                hint="Specific departments, processes, areas, or records evaluated"
-                value={narrative.scope}
-                onChange={(v) => setField("scope", v)}
-                rows={3}
-              />
-              <NarrativeBox
-                title="Methodology"
-                hint="How data was gathered: walkthroughs, document reviews, logs, interviews"
-                value={narrative.methodology}
-                onChange={(v) => setField("methodology", v)}
-                rows={3}
-              />
+              {readonly ? (
+                <>
+                  {narrative.overall_assessment && (
+                    <ReportSection title="Overall Assessment">
+                      <p className="text-sm text-zinc-300 whitespace-pre-line">{narrative.overall_assessment}</p>
+                    </ReportSection>
+                  )}
+                  {narrative.key_findings && (
+                    <ReportSection title="Key Findings Highlights">
+                      <p className="text-sm text-zinc-300 whitespace-pre-line">{narrative.key_findings}</p>
+                    </ReportSection>
+                  )}
+                  {narrative.scope && (
+                    <ReportSection title="Audit Scope">
+                      <p className="text-sm text-zinc-300 whitespace-pre-line">{narrative.scope}</p>
+                    </ReportSection>
+                  )}
+                  {narrative.methodology && (
+                    <ReportSection title="Methodology">
+                      <p className="text-sm text-zinc-300 whitespace-pre-line">{narrative.methodology}</p>
+                    </ReportSection>
+                  )}
+                </>
+              ) : (
+                <>
+                  <NarrativeBox
+                    title="Overall Assessment"
+                    hint="e.g. Compliant, Needs Improvement, Non-Compliant"
+                    value={narrative.overall_assessment}
+                    onChange={(v) => setField("overall_assessment", v)}
+                    rows={3}
+                  />
+                  <NarrativeBox
+                    title="Key Findings Highlights"
+                    hint="Brief summary for executive management: critical risk areas and major wins"
+                    value={narrative.key_findings}
+                    onChange={(v) => setField("key_findings", v)}
+                    rows={4}
+                  />
+                  <NarrativeBox
+                    title="Audit Scope"
+                    hint="Specific departments, processes, areas, or records evaluated"
+                    value={narrative.scope}
+                    onChange={(v) => setField("scope", v)}
+                    rows={3}
+                  />
+                  <NarrativeBox
+                    title="Methodology"
+                    hint="How data was gathered: walkthroughs, document reviews, logs, interviews"
+                    value={narrative.methodology}
+                    onChange={(v) => setField("methodology", v)}
+                    rows={3}
+                  />
+                </>
+              )}
 
               <ReportSection title="Criteria / Standards">
                 {criteria.length === 0 ? (
@@ -685,13 +718,21 @@ export default function AuditReportTab() {
               </ReportSection>
 
               <ReportSection title="Conformances / Strengths">
-                <textarea
-                  value={narrative.conformances}
-                  onChange={(e) => setField("conformances", e.target.value)}
-                  placeholder="Areas operating smoothly and meeting standards..."
-                  rows={4}
-                  className={`${inputClass} resize-none`}
-                />
+                {readonly ? (
+                  narrative.conformances ? (
+                    <p className="text-sm text-zinc-300 whitespace-pre-line">{narrative.conformances}</p>
+                  ) : (
+                    <p className="text-sm text-zinc-500">No conformances recorded.</p>
+                  )
+                ) : (
+                  <textarea
+                    value={narrative.conformances}
+                    onChange={(e) => setField("conformances", e.target.value)}
+                    placeholder="Areas operating smoothly and meeting standards..."
+                    rows={4}
+                    className={`${inputClass} resize-none`}
+                  />
+                )}
               </ReportSection>
 
               <ReportSection title="Non-Conformances">
@@ -924,13 +965,15 @@ export default function AuditReportTab() {
               </ReportSection>
 
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="rounded-lg border border-zinc-600 bg-zinc-800 px-5 py-2.5 text-sm font-medium text-zinc-100 transition-colors hover:bg-zinc-700 disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save Report"}
-                </button>
+                {!readonly && (
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="rounded-lg border border-zinc-600 bg-zinc-800 px-5 py-2.5 text-sm font-medium text-zinc-100 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Report"}
+                  </button>
+                )}
                 <button
                   onClick={handlePdf}
                   disabled={pdfBusy}
@@ -938,7 +981,7 @@ export default function AuditReportTab() {
                 >
                   {pdfBusy ? "Preparing..." : "Download PDF"}
                 </button>
-                {(savedAt || autosaveStatus !== "idle") && (
+                {!readonly && (savedAt || autosaveStatus !== "idle") && (
                   <span className="text-xs text-emerald-400">
                     {autosaveStatus === "saving"
                       ? "Autosaving..."
