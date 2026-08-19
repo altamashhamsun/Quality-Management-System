@@ -85,6 +85,7 @@ export default function PerformancesPage() {
   const [qcSessions, setQcSessions] = useState<QCSessionRow[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [includeQc, setIncludeQc] = useState(true);
 
   const load = useCallback(async () => {
     const [recordsResult, incidentsResult, qcReportsResult, qcSessionsResult, branchesResult] = await Promise.all([
@@ -226,6 +227,7 @@ export default function PerformancesPage() {
       else branchStat.unresolved += 1;
     }
 
+    if (includeQc) {
     const branchIdToName = new Map<string, string>();
     for (const b of branches) {
       branchIdToName.set(b.id, b.name);
@@ -284,6 +286,7 @@ export default function PerformancesPage() {
         else branchStat.unresolved += 1;
       }
     }
+    }
 
     const deptStats = [...deptMap.values()].map((d) => ({
       ...d,
@@ -299,7 +302,7 @@ export default function PerformancesPage() {
     branchStats.sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
 
     return { deptStats, branchStats };
-  }, [records, incidents, qcReports, qcSessions, branches]);
+  }, [records, incidents, qcReports, qcSessions, branches, includeQc]);
 
   const maxDeptResolved = Math.max(1, ...deptStats.map((d) => d.resolved));
   const bestBranch = branchStats[0];
@@ -309,11 +312,27 @@ export default function PerformancesPage() {
       <Header />
 
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-zinc-50">Performances</h2>
-          <p className="mt-1 text-sm text-zinc-500">
-            Department and branch compliance performance
-          </p>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-50">Performances</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Department and branch compliance performance
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIncludeQc((v) => !v)}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-zinc-800 transition-colors">
+              <span
+                className={`inline-block h-3 w-3 rounded-full bg-zinc-400 transition-transform ${
+                  includeQc ? "translate-x-3.5 bg-amber-400" : "translate-x-0.5"
+                }`}
+              />
+            </span>
+            <span>QC Issues</span>
+          </button>
         </div>
 
         {dataLoading ? (
