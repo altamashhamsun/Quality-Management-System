@@ -221,18 +221,22 @@ export default function QualityControlPage() {
         if (!report) continue;
         const branch = branchMap.get(report.branch_id) ?? "Unknown";
         const sorted = [...reportSessions].sort((a, b) => a.round_number - b.round_number);
-        const r1 = sorted.find((s) => s.round_number === 1);
-        if (!r1) continue;
-        const r1Found = (r1.checklist ?? []).filter((i) => i.found_issue);
-        if (r1Found.length === 0) continue;
+        if (sorted.length < 2) continue;
         const lastSession = sorted[sorted.length - 1];
         const lastChecklist = lastSession.checklist ?? [];
-        for (const item of r1Found) {
-          const lastItem = lastChecklist.find((i) => i.item === item.item && i.question === item.question);
-          if (lastItem && lastItem.answer === true) continue;
-          if (!lastItem) continue;
-          const foundAt = r1.created_at
-            ? new Date(r1.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+        if (lastChecklist.length === 0) continue;
+        const firstSession = sorted.find((s) => (s.checklist ?? []).length > 0 && s.round_number !== lastSession.round_number);
+        const foundChecklist = firstSession?.checklist ?? [];
+        const foundMap = new Map<string, QCItem>();
+        for (const fi of foundChecklist) {
+          if (fi.found_issue) foundMap.set(fi.item + "|" + fi.question, fi);
+        }
+        for (const li of lastChecklist) {
+          if (li.answer === true) continue;
+          const foundIssueText = foundMap.get(li.item + "|" + li.question)?.found_issue ?? li.found_issue;
+          if (!foundIssueText) continue;
+          const foundAt = firstSession?.created_at
+            ? new Date(firstSession.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
             : "—";
           const lastCheckedAt = lastSession.created_at
             ? new Date(lastSession.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
@@ -240,12 +244,12 @@ export default function QualityControlPage() {
           persistent.push({
             branch,
             reportTitle: report.title,
-            item: item.item,
-            question: item.question,
-            foundIssue: item.found_issue,
+            item: li.item,
+            question: li.question,
+            foundIssue: foundIssueText,
             foundAt,
             lastCheckedAt,
-            roundFound: 1,
+            roundFound: firstSession?.round_number ?? lastSession.round_number,
             roundLast: lastSession.round_number,
           });
         }
