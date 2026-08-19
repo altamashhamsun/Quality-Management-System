@@ -109,6 +109,10 @@ export default function QualityControlPage() {
   const [evalModal, setEvalModal] = useState(false);
   const [evalData, setEvalData] = useState<EvalData | null>(null);
   const [deletingRound, setDeletingRound] = useState<string | null>(null);
+  const [selectedUnresolvedBranch, setSelectedUnresolvedBranch] = useState<string | null>(null);
+  const [persistentUnresolved, setPersistentUnresolved] = useState<
+    { branch: string; reportTitle: string; item: string; question: string; foundIssue: string; foundAt: string; lastCheckedAt: string; roundFound: number; roundLast: number }[]
+  >([]);
 
   const saveTimer = useRef<number | null>(null);
   const descriptionsRef = useRef(descriptions);
@@ -139,7 +143,7 @@ export default function QualityControlPage() {
     (async () => {
       const { data: allSessions } = await supabase
         .from("quality_sessions")
-        .select("id, report_id, round_number, checklist");
+        .select("id, report_id, round_number, checklist, created_at, closed_at");
 
       if (!allSessions) return;
 
@@ -205,6 +209,48 @@ export default function QualityControlPage() {
       });
       rankings.forEach((r, i) => { r.rank = i + 1; });
       setBranchRankings(rankings);
+
+      const sessionsByReport = new Map<string, { report_id: string; round_number: number; checklist: QCItem[] | null; created_at: string; closed_at: string | null }[]>();
+      for (const s of allSessions as { report_id: string; round_number: number; checklist: QCItem[] | null; created_at: string; closed_at: string | null }[]) {
+        if (!sessionsByReport.has(s.report_id)) sessionsByReport.set(s.report_id, []);
+        sessionsByReport.get(s.report_id)!.push(s);
+      }
+      const persistent: typeof persistentUnresolved = [];
+      for (const [reportId, reportSessions] of sessionsByReport) {
+        const report = reports.find((r) => r.id === reportId);
+        if (!report) continue;
+        const branch = branchMap.get(report.branch_id) ?? "Unknown";
+        const sorted = [...reportSessions].sort((a, b) => a.round_number - b.round_number);
+        const r1 = sorted.find((s) => s.round_number === 1);
+        if (!r1) continue;
+        const r1Found = (r1.checklist ?? []).filter((i) => i.found_issue);
+        if (r1Found.length === 0) continue;
+        const lastSession = sorted[sorted.length - 1];
+        const lastChecklist = lastSession.checklist ?? [];
+        for (const item of r1Found) {
+          const lastItem = lastChecklist.find((i) => i.item === item.item && i.question === item.question);
+          if (lastItem && lastItem.answer === true) continue;
+          if (!lastItem) continue;
+          const foundAt = r1.created_at
+            ? new Date(r1.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+            : "—";
+          const lastCheckedAt = lastSession.created_at
+            ? new Date(lastSession.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })
+            : "—";
+          persistent.push({
+            branch,
+            reportTitle: report.title,
+            item: item.item,
+            question: item.question,
+            foundIssue: item.found_issue,
+            foundAt,
+            lastCheckedAt,
+            roundFound: 1,
+            roundLast: lastSession.round_number,
+          });
+        }
+      }
+      setPersistentUnresolved(persistent);
     })();
   }, [reports, branches]);
 
@@ -844,6 +890,58 @@ export default function QualityControlPage() {
                 </div>
               </div>
             )}
+            {persistentUnresolved.length > 0 && (() => {
+              const branchGroups = new Map<string, typeof persistentUnresolved>();
+              for (const item of persistentUnresolved) {
+                const list = branchGroups.get(item.branch) ?? [];
+                list.push(item);
+                branchGroups.set(item.branch, list);
+              }
+              const sortedBranches = [...branchGroups.keys()].sort();
+              return (
+                <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
+                  <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Persistent Unresolved Issues</h3>
+                  <p className="mb-4 text-xs text-zinc-500">Issues found in round 1 that remain unresolved — not fixed after multiple rounds</p>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {sortedBranches.map((b) => (
+                      <button
+                        key={b}
+                        onClick={() => setSelectedUnresolvedBranch(selectedUnresolvedBranch === b ? null : b)}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                          selectedUnresolvedBranch === b
+                            ? "border-amber-600 bg-amber-500/10 text-amber-400"
+                            : "border-zinc-800 bg-zinc-900/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                        }`}
+                      >
+                        {b}
+                        <span className="ml-1.5 rounded-full bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">{branchGroups.get(b)!.length}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedUnresolvedBranch && (
+                    <div className="space-y-2">
+                      {(branchGroups.get(selectedUnresolvedBranch) ?? []).map((item, idx) => (
+                        <div key={idx} className="rounded-lg border border-red-900/30 bg-red-950/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-100">{item.item}</p>
+                              <p className="text-xs text-zinc-400 mt-0.5">{item.question}</p>
+                            </div>
+                            <span className="shrink-0 rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">Unresolved</span>
+                          </div>
+                          <p className="mt-2 text-xs text-zinc-500">Found: {item.foundIssue}</p>
+                          <div className="mt-2 flex flex-wrap gap-4 text-[10px] text-zinc-500">
+                            <span>Found in R{item.roundFound} — {item.foundAt}</span>
+                            <span>Last checked R{item.roundLast} — {item.lastCheckedAt}</span>
+                          </div>
+                          <p className="mt-1 text-[10px] text-zinc-600">Report: {item.reportTitle}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {filteredReports.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No reports yet. Click &quot;Create Report&quot; to begin.
