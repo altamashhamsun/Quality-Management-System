@@ -41,6 +41,13 @@ export async function POST(req: NextRequest) {
       answer?: boolean;
     }>;
     previousAnswers?: Record<string, boolean>;
+    previousUnresolved?: Array<{
+      item: string;
+      question: string;
+      found_issue: string;
+      solved: boolean;
+      note: string;
+    }>;
   };
   try {
     body = await req.json();
@@ -48,7 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { round, descriptions, previousChecklist, previousAnswers } = body;
+  const { round, descriptions, previousChecklist, previousAnswers, previousUnresolved } = body;
   if (round == null) {
     return NextResponse.json(
       { error: "Missing required field: round." },
@@ -80,6 +87,18 @@ export async function POST(req: NextRequest) {
       "",
       "Area descriptions:",
       descText,
+      ...(previousUnresolved && previousUnresolved.length > 0 ? [
+        "",
+        "IMPORTANT: The inspector also carried forward unresolved issues from a PREVIOUS inspection.",
+        "For items marked SOLVED — still include them in the checklist so the inspector can verify the fix.",
+        "For items marked NOT SOLVED — include them with priority so they are re-checked.",
+        "",
+        "Previous unresolved issues:",
+        ...previousUnresolved.map((i) => {
+          const status = i.solved ? "SOLVED (verify fix)" : "NOT SOLVED (priority re-check)";
+          return `- [${status}] Item: ${i.item} | Q: ${i.question} | Found: ${i.found_issue}${i.note ? ` | Inspector note: ${i.note}` : ""}`;
+        }),
+      ] : []),
     ].join("\n");
   } else {
     if (!previousChecklist || previousChecklist.length === 0) {

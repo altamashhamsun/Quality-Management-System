@@ -113,6 +113,10 @@ export default function QualityControlPage() {
   const [persistentUnresolved, setPersistentUnresolved] = useState<
     { branch: string; reportTitle: string; item: string; question: string; foundIssue: string; foundAt: string; lastCheckedAt: string; roundFound: number; roundLast: number }[]
   >([]);
+  const [prevUnresolved, setPrevUnresolved] = useState<QCItem[]>([]);
+  const [prevResolutions, setPrevResolutions] = useState<Record<string, { id: string | null; solved: boolean; note: string }>>({});
+  const prevResolutionsRef = useRef(prevResolutions);
+  prevResolutionsRef.current = prevResolutions;
 
   const saveTimer = useRef<number | null>(null);
   const descriptionsRef = useRef(descriptions);
@@ -343,6 +347,35 @@ export default function QualityControlPage() {
     };
   }, [descriptions, view]);
 
+  useEffect(() => {
+    if (view !== "round" || !selectedSession || selectedSession.round_number !== 1) return;
+    if (Object.keys(prevResolutionsRef.current).length === 0) return;
+    if (prevSaveTimer.current) clearTimeout(prevSaveTimer.current);
+    prevSaveTimer.current = window.setTimeout(async () => {
+      const session = sessionRef.current;
+      if (!session) return;
+      const res = prevResolutionsRef.current;
+      for (const [key, data] of Object.entries(res)) {
+        if (!data.note.trim() && !data.solved) continue;
+        const itemName = `__prev__${key}`;
+        const content = JSON.stringify({ solved: data.solved, note: data.note });
+        if (data.id) {
+          await supabase.from("quality_descriptions").update({ content }).eq("id", data.id);
+        } else {
+          const { data: ins } = await supabase
+            .from("quality_descriptions")
+            .insert({ session_id: session.id, item_name: itemName, content })
+            .select("id")
+            .single();
+          if (ins) {
+            prevResolutionsRef.current = { ...prevResolutionsRef.current, [key]: { ...data, id: ins.id } };
+          }
+        }
+      }
+    }, 800);
+    return () => { if (prevSaveTimer.current) clearTimeout(prevSaveTimer.current); };
+  }, [prevResolutions, view]);
+
   const branchName = (id: string) =>
     branches.find((b) => b.id === id)?.name ?? "\u2014";
   const todayStr = () =>
@@ -352,6 +385,43 @@ export default function QualityControlPage() {
       year: "numeric",
     });
   const hasActiveSession = sessions.some((s) => s.status === "active");
+
+  const prevSaveTimer = useRef<number | null>(null);
+  const loadPrevUnresolved = useCallback(async (branchId: string, sessionId: string) => {
+    const prevReports = reports
+      .filter((r) => r.branch_id === branchId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    if (prevReports.length < 2) { setPrevUnresolved([]); return; }
+    const prevReport = prevReports.find((r) => r.id !== prevReports[0]?.id && r.status === "closed");
+    if (!prevReport) { setPrevUnresolved([]); return; }
+    const { data: prevSessions } = await supabase
+      .from("quality_sessions")
+      .select("id, round_number, checklist")
+      .eq("report_id", prevReport.id)
+      .order("round_number", { ascending: false });
+    if (!prevSessions || prevSessions.length === 0) { setPrevUnresolved([]); return; }
+    let lastChecklist: QCItem[] = [];
+    for (const s of prevSessions) {
+      if (s.checklist && s.checklist.length > 0) { lastChecklist = s.checklist; break; }
+    }
+    const unresolved = lastChecklist.filter((i) => i.answer === false);
+    setPrevUnresolved(unresolved);
+    const { data: existingDescs } = await supabase
+      .from("quality_descriptions")
+      .select("id, item_name, content")
+      .eq("session_id", sessionId);
+    const resMap: Record<string, { id: string | null; solved: boolean; note: string }> = {};
+    for (const item of unresolved) {
+      const key = item.item + "|" + item.question;
+      const existing = (existingDescs ?? []).find((d) => d.item_name === `__prev__${key}`);
+      if (existing) {
+        try { const parsed = JSON.parse(existing.content); resMap[key] = { id: existing.id, solved: parsed.solved, note: parsed.note }; } catch { resMap[key] = { id: existing.id, solved: false, note: existing.content }; }
+      } else {
+        resMap[key] = { id: null, solved: false, note: "" };
+      }
+    }
+    setPrevResolutions(resMap);
+  }, [reports]);
 
   const loadAreas = useCallback(async (branchId: string) => {
     if (!branchId) { setAreas([]); return; }
@@ -472,6 +542,10 @@ export default function QualityControlPage() {
         }
       }
       setDescriptions(descs);
+      loadPrevUnresolved(selectedReport.branch_id, session.id);
+    } else {
+      setPrevUnresolved([]);
+      setPrevResolutions({});
     }
     setView("round");
   }
@@ -479,6 +553,12 @@ export default function QualityControlPage() {
   function openSession(s: QCSession) {
     setSelectedSession(s);
     setView("round");
+    if (s.round_number === 1 && selectedReport) {
+      loadPrevUnresolved(selectedReport.branch_id, s.id);
+    } else {
+      setPrevUnresolved([]);
+      setPrevResolutions({});
+    }
   }
 
   async function forceSaveDescriptions() {
@@ -512,10 +592,18 @@ export default function QualityControlPage() {
         for (const [k, v] of Object.entries(descriptionsRef.current)) {
           if (v.content.trim()) descs[k] = v.content.trim();
         }
+        const prevResolved: { item: string; question: string; found_issue: string; solved: boolean; note: string }[] = [];
+        for (const item of prevUnresolved) {
+          const key = item.item + "|" + item.question;
+          const res = prevResolutionsRef.current[key];
+          if (res) {
+            prevResolved.push({ item: item.item, question: item.question, found_issue: item.found_issue, solved: res.solved, note: res.note });
+          }
+        }
         const res = await fetch("/api/ai/quality-checklist", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ round: 1, descriptions: descs }),
+          body: JSON.stringify({ round: 1, descriptions: descs, previousUnresolved: prevResolved.length > 0 ? prevResolved : undefined }),
         });
         const result = await res.json();
         if (!res.ok) throw new Error(result.error || "AI failed");
@@ -1086,6 +1174,46 @@ export default function QualityControlPage() {
 
             {isRound1 && (
               <div className="space-y-6">
+                {prevUnresolved.length > 0 && (
+                  <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-5">
+                    <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-amber-400">Previous Day — Unresolved Issues</h3>
+                    <p className="mb-4 text-xs text-zinc-500">Issues from the previous report that were not resolved. Mark each as solved or add notes.</p>
+                    <div className="space-y-3">
+                      {prevUnresolved.map((item) => {
+                        const key = item.item + "|" + item.question;
+                        const res = prevResolutions[key] ?? { id: null, solved: false, note: "" };
+                        return (
+                          <div key={key} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-zinc-100">{item.item}</p>
+                                <p className="text-xs text-zinc-400 mt-0.5">{item.question}</p>
+                                <p className="text-xs text-zinc-500 mt-1">Found: {item.found_issue}</p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  onClick={() => setPrevResolutions((p) => ({ ...p, [key]: { ...res, solved: true } }))}
+                                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${res.solved ? "bg-emerald-600 text-white" : "border border-zinc-800 text-zinc-500 hover:bg-zinc-900/60"}`}
+                                >Solved</button>
+                                <button
+                                  onClick={() => setPrevResolutions((p) => ({ ...p, [key]: { ...res, solved: false } }))}
+                                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${res.solved === false && (res.note || prevUnresolved.some((u) => u.item === item.item)) ? "bg-red-600 text-white" : "border border-zinc-800 text-zinc-500 hover:bg-zinc-900/60"}`}
+                                >Not Solved</button>
+                              </div>
+                            </div>
+                            <textarea
+                              value={res.note}
+                              onChange={(e) => setPrevResolutions((p) => ({ ...p, [key]: { ...res, note: e.target.value } }))}
+                              placeholder="Add notes about this issue (optional)..."
+                              rows={2}
+                              className="mt-3 w-full rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-50 placeholder:text-zinc-600 focus:border-zinc-700 focus:outline-none"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {Object.entries(reportAreas).map(([area, areaItems]) => (
                   <div key={area}>
                     <h3 className="mb-3 text-sm font-semibold text-zinc-500 uppercase tracking-wider">{area}</h3>
