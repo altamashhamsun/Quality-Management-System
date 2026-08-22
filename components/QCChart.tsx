@@ -10,43 +10,45 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
+  Area,
+  ComposedChart,
+  Bar,
 } from "recharts";
 
+type ChartDatum = {
+  round: number;
+  resolved: number;
+  unresolved: number;
+  resolutionRate: number;
+};
+
 type Props = {
-  data: { round: number; [branch: string]: number | string }[];
+  data: ChartDatum[];
   improvement?: { fromRound: number; toRound: number; resolvedDelta: number; rateFrom: number; rateTo: number } | null;
 };
 
-const COLORS = ["#e11d48", "#2563eb", "#16a34a", "#d97706", "#7c3aed", "#0891b2"];
-
 export default function QCChart({ data, improvement }: Props) {
-  const seriesNames = Object.keys(data[0]).filter((k) => k !== "round");
+  const rateDelta = improvement ? improvement.rateTo - improvement.rateFrom : 0;
   return (
     <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
-      <div className="mb-4 flex items-start justify-between gap-4">
+      <div className="mb-4 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
-            Issues Resolved per Round
+            Quality Progress by Round
           </h3>
           <p className="text-xs text-zinc-500">
-            How many issues were resolved vs unresolved in each round
+            Resolution rate % and issue counts across inspection rounds
           </p>
         </div>
         {improvement && (
-          <div className={`shrink-0 rounded-lg border px-3 py-2 text-center ${
-            improvement.resolvedDelta > 0
-              ? "border-emerald-800 bg-emerald-950/60"
-              : improvement.resolvedDelta < 0
-                ? "border-red-800 bg-red-950/60"
-                : "border-zinc-700 bg-zinc-900/60"
+          <div className={`shrink-0 rounded-lg border px-4 py-2.5 text-center ${
+            rateDelta > 0 ? "border-emerald-700 bg-emerald-950/60" : rateDelta < 0 ? "border-red-700 bg-red-950/60" : "border-zinc-700 bg-zinc-900/60"
           }`}>
-            <div className={`text-lg font-bold ${
-              improvement.resolvedDelta > 0 ? "text-emerald-400" : improvement.resolvedDelta < 0 ? "text-red-400" : "text-zinc-400"
-            }`}>
-              {improvement.resolvedDelta > 0 ? "+" : ""}{improvement.resolvedDelta}
+            <div className={`text-2xl font-bold ${rateDelta > 0 ? "text-emerald-400" : rateDelta < 0 ? "text-red-400" : "text-zinc-400"}`}>
+              {rateDelta > 0 ? "+" : ""}{rateDelta.toFixed(0)}%
             </div>
             <div className="text-[10px] text-zinc-500">
-              R{improvement.fromRound}→R{improvement.toRound}
+              R{improvement.fromRound} to R{improvement.toRound}
             </div>
           </div>
         )}
@@ -54,60 +56,93 @@ export default function QCChart({ data, improvement }: Props) {
 
       {improvement && (
         <div className="mb-4 flex flex-wrap gap-3">
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5">
-            <span className="text-[10px] text-zinc-500">Resolution Rate R{improvement.fromRound}:</span>
-            <span className="ml-1.5 text-xs font-semibold text-zinc-300">{improvement.rateFrom.toFixed(0)}%</span>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <span className="text-[10px] text-zinc-500 block">R{improvement.fromRound} Rate</span>
+            <span className="text-sm font-bold text-zinc-200">{improvement.rateFrom.toFixed(0)}%</span>
           </div>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5">
-            <span className="text-[10px] text-zinc-500">Resolution Rate R{improvement.toRound}:</span>
-            <span className={`ml-1.5 text-xs font-semibold ${
-              improvement.rateTo > improvement.rateFrom ? "text-emerald-400" : improvement.rateTo < improvement.rateFrom ? "text-red-400" : "text-zinc-300"
-            }`}>{improvement.rateTo.toFixed(0)}%</span>
-          </div>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5">
-            <span className="text-[10px] text-zinc-500">Trend:</span>
-            <span className={`ml-1.5 text-xs font-semibold ${
-              improvement.resolvedDelta > 0 ? "text-emerald-400" : improvement.resolvedDelta < 0 ? "text-red-400" : "text-zinc-400"
-            }`}>
-              {improvement.resolvedDelta > 0 ? "Improved" : improvement.resolvedDelta < 0 ? "Declined" : "No change"}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <span className="text-[10px] text-zinc-500 block">R{improvement.toRound} Rate</span>
+            <span className={`text-sm font-bold ${rateDelta > 0 ? "text-emerald-400" : rateDelta < 0 ? "text-red-400" : "text-zinc-200"}`}>
+              {improvement.rateTo.toFixed(0)}%
             </span>
           </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+            <span className="text-[10px] text-zinc-500 block">Trend</span>
+            <span className={`text-sm font-bold ${rateDelta > 0 ? "text-emerald-400" : rateDelta < 0 ? "text-red-400" : "text-zinc-400"}`}>
+              {rateDelta > 0 ? "Improved" : rateDelta < 0 ? "Declined" : "No change"}
+            </span>
+          </div>
+          {data.map((d) => (
+            <div key={d.round} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
+              <span className="text-[10px] text-zinc-500 block">Round {d.round}</span>
+              <span className="text-sm font-bold text-zinc-200">{d.resolved}/{d.resolved + d.unresolved}</span>
+              <span className="text-[10px] text-zinc-500"> resolved</span>
+            </div>
+          ))}
         </div>
       )}
 
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data}>
+      <ResponsiveContainer width="100%" height={340}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+          <defs>
+            <linearGradient id="rateGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-          <XAxis dataKey="round" tick={{ fill: "#a1a1aa", fontSize: 12 }} tickFormatter={(v) => `R${v}`} stroke="#3f3f46" />
-          <YAxis tick={{ fill: "#a1a1aa", fontSize: 12 }} stroke="#3f3f46" allowDecimals={false} />
-          <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, color: "#fafafa", fontSize: 12 }} labelFormatter={(v) => `Round ${v}`} />
+          <XAxis
+            dataKey="round"
+            tick={{ fill: "#a1a1aa", fontSize: 13, fontWeight: 600 }}
+            tickFormatter={(v) => `Round ${v}`}
+            stroke="#3f3f46"
+            axisLine={{ stroke: "#3f3f46" }}
+          />
+          <YAxis
+            yAxisId="rate"
+            domain={[0, 100]}
+            tick={{ fill: "#a1a1aa", fontSize: 12 }}
+            stroke="#3f3f46"
+            tickFormatter={(v) => `${v}%`}
+          />
+          <YAxis
+            yAxisId="count"
+            orientation="right"
+            tick={{ fill: "#a1a1aa", fontSize: 12 }}
+            stroke="#3f3f46"
+            allowDecimals={false}
+          />
+          <Tooltip
+            contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, color: "#fafafa", fontSize: 12 }}
+            formatter={(value, name) => {
+              if (name === "Resolution Rate") return [`${Number(value).toFixed(1)}%`, name];
+              return [value, name];
+            }}
+            labelFormatter={(v) => `Round ${v}`}
+          />
           <Legend wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }} />
-          {improvement && (
-            <ReferenceLine
-              y={data.length > 0 ? Math.round(
-                data.reduce((sum, d) => {
-                  const resolved = Number(d.Resolved ?? 0);
-                  const unresolved = Number(d.Unresolved ?? 0);
-                  return sum + (resolved + unresolved > 0 ? resolved / (resolved + unresolved) : 0);
-                }, 0) / data.length * (data.length > 0 ? Math.max(...data.map((d) => Number(d.Resolved ?? 0) + Number(d.Unresolved ?? 0))) : 1)
-              ) : 0}
-              stroke="#52525b"
-              strokeDasharray="6 3"
-              label={{ value: "avg", fill: "#52525b", fontSize: 10 }}
-            />
-          )}
-          {seriesNames.map((name, i) => (
-            <Line
-              key={name}
-              type="monotone"
-              dataKey={name}
-              stroke={COLORS[i % COLORS.length]}
-              strokeWidth={2}
-              dot={{ r: 4 }}
-              activeDot={{ r: 6 }}
-            />
-          ))}
-        </LineChart>
+          <ReferenceLine yAxisId="rate" y={50} stroke="#52525b" strokeDasharray="6 3" />
+          <Area
+            yAxisId="rate"
+            type="monotone"
+            dataKey="resolutionRate"
+            fill="url(#rateGradient)"
+            stroke="none"
+            name="Resolution Rate"
+          />
+          <Line
+            yAxisId="rate"
+            type="monotone"
+            dataKey="resolutionRate"
+            stroke="#10b981"
+            strokeWidth={3}
+            dot={{ r: 6, fill: "#10b981", strokeWidth: 2, stroke: "#050507" }}
+            activeDot={{ r: 8 }}
+            name="Resolution Rate"
+          />
+          <Bar yAxisId="count" dataKey="resolved" fill="#3b82f6" radius={[4, 4, 0, 0]} opacity={0.7} name="Resolved" />
+          <Bar yAxisId="count" dataKey="unresolved" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.7} name="Unresolved" />
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

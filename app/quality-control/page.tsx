@@ -115,7 +115,7 @@ export default function QualityControlPage() {
   const [rankingMonth, setRankingMonth] = useState<string>(String(new Date().getMonth() + 1).padStart(2, "0"));
   const [rankingYear, setRankingYear] = useState<string>(String(new Date().getFullYear()));
   const [reportChartData, setReportChartData] = useState<
-    { round: number; resolved: number; unresolved: number }[] | null
+    { round: number; resolved: number; unresolved: number; resolutionRate: number }[] | null
   >(null);
   const [chartImprovement, setChartImprovement] = useState<{
     fromRound: number; toRound: number; resolvedDelta: number; rateFrom: number; rateTo: number;
@@ -394,11 +394,12 @@ export default function QualityControlPage() {
   function loadReportChart(reportSessions: QCSession[]) {
     const rounds = reportSessions.filter((s) => s.checklist && s.checklist.length > 0);
     if (rounds.length === 0) { setReportChartData(null); setChartImprovement(null); return; }
-    const data: { round: number; resolved: number; unresolved: number }[] = [];
+    const data: { round: number; resolved: number; unresolved: number; resolutionRate: number }[] = [];
     for (const s of rounds) {
       const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
       const unresolved = (s.checklist ?? []).filter((i) => i.answer === false).length;
-      data.push({ round: s.round_number, resolved, unresolved });
+      const total = resolved + unresolved;
+      data.push({ round: s.round_number, resolved, unresolved, resolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0 });
     }
     setReportChartData(data.length > 0 ? data : null);
     if (data.length >= 2) {
@@ -692,15 +693,17 @@ export default function QualityControlPage() {
   }
 
   function openSession(s: QCSession) {
-    setSelectedSession(s);
-    setView("round");
-    if (s.round_number === 1 && selectedReport) {
-      loadPrevUnresolved(selectedReport.branch_id, s.id);
-    } else {
-      setPrevUnresolved([]);
-      setPrevResolutions({});
-    }
-    loadReportChart(sessions);
+    forceSaveAll().then(() => {
+      setSelectedSession(s);
+      setView("round");
+      if (s.round_number === 1 && selectedReport) {
+        loadPrevUnresolved(selectedReport.branch_id, s.id);
+      } else {
+        setPrevUnresolved([]);
+        setPrevResolutions({});
+      }
+      loadReportChart(sessions);
+    });
   }
 
   async function forceSaveDescriptions() {
@@ -723,6 +726,36 @@ export default function QualityControlPage() {
       }
     }
   }
+
+  async function forceSaveAll() {
+    const session = sessionRef.current;
+    if (!session) return;
+    await forceSaveDescriptions();
+    if (session.round_number === 1) {
+      const res = prevResolutionsRef.current;
+      for (const [key, data] of Object.entries(res)) {
+        if (!data.note.trim() && !data.solved) continue;
+        const itemName = `__prev__${key}`;
+        const content = JSON.stringify({ solved: data.solved, note: data.note });
+        if (data.id) {
+          await supabase.from("quality_descriptions").update({ content }).eq("id", data.id);
+        } else {
+          const { data: ins } = await supabase
+            .from("quality_descriptions")
+            .insert({ session_id: session.id, item_name: itemName, content })
+            .select("id")
+            .single();
+          if (ins) prevResolutionsRef.current = { ...prevResolutionsRef.current, [key]: { ...data, id: ins.id } };
+        }
+      }
+    }
+  }
+
+  useEffect(() => {
+    const handler = () => { if (sessionRef.current) forceSaveAll(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
 
   async function closeRound() {
     if (!selectedSession || !selectedReport) return;
@@ -1259,7 +1292,7 @@ export default function QualityControlPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setView("list"); setSelectedReport(null); setSelectedSession(null); }} className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60">Back</button>
+                <button onClick={() => { forceSaveAll().then(() => { setView("list"); setSelectedReport(null); setSelectedSession(null); }); }} className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60">Back</button>
                 <button onClick={endDay} disabled={sessions.length === 0} className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60 disabled:opacity-40">End Day</button>
                 {selectedReport.status === "active" && (
                   <button onClick={addRound} disabled={hasActiveSession} title={hasActiveSession ? "Close the active round first" : ""} className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-zinc-950 transition hover:bg-zinc-900/60 disabled:opacity-40">Add Round</button>
@@ -1272,7 +1305,7 @@ export default function QualityControlPage() {
             </div>
             {reportChartData && reportChartData.length > 0 && (
               <div className="mb-6">
-                <LazyQCChart data={reportChartData.map((d) => ({ round: d.round, Resolved: d.resolved, Unresolved: d.unresolved }))} improvement={chartImprovement} />
+                <LazyQCChart data={reportChartData} improvement={chartImprovement} />
               </div>
             )}
             {sessions.length === 0 ? (
@@ -1340,7 +1373,7 @@ export default function QualityControlPage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setView("report"); setSelectedSession(null); }} className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60">Back</button>
+                <button onClick={() => { forceSaveAll().then(() => { setView("report"); setSelectedSession(null); }); }} className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-900/60">Back</button>
                 {isRound1 && isClosed && (
                   <button onClick={regenerateChecklist} disabled={regenerating} className="rounded-lg border border-amber-700 px-3 py-2 text-sm font-medium text-amber-400 transition hover:bg-amber-950 disabled:opacity-40">
                     {regenerating ? "Regenerating\u2026" : "Regenerate Checklist"}
@@ -1516,9 +1549,10 @@ export default function QualityControlPage() {
                                     const updated = (selectedSession?.checklist ?? []).map((ci) =>
                                       ci.id === item.id ? { ...ci, photos } : ci
                                     );
+                                    const sessionId = selectedSession!.id;
                                     setSelectedSession((prev) => prev ? { ...prev, checklist: updated } : prev);
-                                    setSessions((prev) => prev.map((s) => s.id === selectedSession?.id ? { ...s, checklist: updated } : s));
-                                    await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", selectedSession!.id);
+                                    setSessions((prev) => prev.map((s) => s.id === sessionId ? { ...s, checklist: updated } : s));
+                                    await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", sessionId);
 
                                     (async () => {
                                       try {
@@ -1535,13 +1569,17 @@ export default function QualityControlPage() {
                                         const driveData = await res.json();
                                         if (res.ok && driveData.id) {
                                           const link = driveData.publicLink ?? driveData.webViewLink ?? "";
-                                          const updatedWithLink = (selectedSession?.checklist ?? []).map((ci) => {
-                                            if (ci.id !== item.id) return ci;
-                                            const p = [...(ci.photos ?? [])];
-                                            p[p.length - 1] = dataUrl;
-                                            return { ...ci, photos: p, driveLinks: [...(ci as Record<string, unknown>).driveLinks as string[] || [], link].filter(Boolean) };
-                                          });
-                                          await supabase.from("quality_sessions").update({ checklist: updatedWithLink }).eq("id", selectedSession!.id);
+                                          if (link) {
+                                            const { data: fresh } = await supabase.from("quality_sessions").select("checklist").eq("id", sessionId).maybeSingle();
+                                            if (fresh?.checklist) {
+                                              const merged = fresh.checklist.map((ci: QCItem) => {
+                                                if (ci.id !== item.id) return ci;
+                                                const existingLinks = (ci as unknown as { driveLinks?: string[] }).driveLinks ?? [];
+                                                return { ...ci, driveLinks: [...existingLinks, link] };
+                                              });
+                                              await supabase.from("quality_sessions").update({ checklist: merged }).eq("id", sessionId);
+                                            }
+                                          }
                                         }
                                       } catch { /* Drive upload is best-effort */ }
                                     })();
