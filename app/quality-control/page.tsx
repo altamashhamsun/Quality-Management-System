@@ -986,12 +986,46 @@ export default function QualityControlPage() {
       .select("owner_name")
       .eq("id", 1)
       .maybeSingle();
+
+    const chartData = (reportChartData ?? []).map((d) => ({
+      round: d.round,
+      resolved: d.resolved,
+      unresolved: d.unresolved,
+      resolutionRate: d.resolutionRate,
+    }));
+
+    const allChecklistItems = rounds.flatMap((r) => r.checklist ?? []);
+    const totalResolved = allChecklistItems.filter((i) => i.answer === true).length;
+    const totalUnresolved = allChecklistItems.filter((i) => i.answer === false).length;
+    const totalAnswered = totalResolved + totalUnresolved;
+    const overallRate = totalAnswered > 0 ? (totalResolved / totalAnswered) * 100 : 0;
+    const firstRate = chartData.length > 0 ? chartData[0].resolutionRate : 0;
+    const lastRate = chartData.length > 0 ? chartData[chartData.length - 1].resolutionRate : 0;
+    const rateChange = lastRate - firstRate;
+    const trendDirection = rateChange > 2 ? "improved" as const : rateChange < -2 ? "declined" as const : "unchanged" as const;
+    const bestRound = chartData.length > 0 ? chartData.reduce((best, d) => d.resolutionRate > best.resolutionRate ? d : best, chartData[0]).round : 0;
+    const worstRound = chartData.length > 0 ? chartData.reduce((worst, d) => d.resolutionRate < worst.resolutionRate ? d : worst, chartData[0]).round : 0;
+
     const { downloadQualityReportPdf } = await import("@/lib/qualityReportPdf");
-    downloadQualityReportPdf({      title: selectedReport.title,
+    downloadQualityReportPdf({
+      title: selectedReport.title,
       branchName: branchName(selectedReport.branch_id),
       date: todayStr(),
       auditor: settings?.owner_name || undefined,
       rounds,
+      chartData,
+      summary: {
+        totalRounds: rounds.length,
+        totalResolved,
+        totalUnresolved,
+        overallRate,
+        trendDirection,
+        rateChange,
+        firstRoundRate: firstRate,
+        lastRoundRate: lastRate,
+        bestRound,
+        worstRound,
+      },
     });
   }
 

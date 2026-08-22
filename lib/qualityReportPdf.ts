@@ -17,6 +17,24 @@ export type QualityReportPdfData = {
       photos?: string[];
     }>;
   }>;
+  chartData?: Array<{
+    round: number;
+    resolved: number;
+    unresolved: number;
+    resolutionRate: number;
+  }>;
+  summary?: {
+    totalRounds: number;
+    totalResolved: number;
+    totalUnresolved: number;
+    overallRate: number;
+    trendDirection: "improved" | "declined" | "unchanged";
+    rateChange: number;
+    firstRoundRate: number;
+    lastRoundRate: number;
+    bestRound: number;
+    worstRound: number;
+  };
 };
 
 const MARGIN = 14;
@@ -172,6 +190,133 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
     my += rowH + 3;
   }
   y = my + 6;
+
+  // ---- EXECUTIVE SUMMARY ----
+  if (data.summary) {
+    const s = data.summary;
+    sectionHeader("Executive Summary");
+
+    const trendColor: [number, number, number] = s.trendDirection === "improved" ? [30, 140, 60] : s.trendDirection === "declined" ? [ACCENT[0], ACCENT[1], ACCENT[2]] : [MUTED[0], MUTED[1], MUTED[2]];
+    const summaryLines: string[] = [
+      `Total rounds completed: ${s.totalRounds}`,
+      `Total issues found: ${s.totalResolved + s.totalUnresolved} (${s.totalResolved} resolved, ${s.totalUnresolved} unresolved)`,
+      `Overall resolution rate: ${s.overallRate.toFixed(1)}%`,
+      `Quality trend: ${s.trendDirection === "improved" ? "IMPROVED" : s.trendDirection === "declined" ? "DECLINED" : "UNCHANGED"} (${s.rateChange > 0 ? "+" : ""}${s.rateChange.toFixed(1)}% from Round 1 to Round ${s.totalRounds})`,
+      `Best performing round: Round ${s.bestRound} | Worst performing round: Round ${s.worstRound}`,
+    ];
+
+    for (const line of summaryLines) {
+      ensure(6);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(...BODY);
+      doc.text(line, MARGIN + 2, y);
+      y += 5.5;
+    }
+
+    ensure(14);
+    const trendLabel = s.trendDirection === "improved" ? "IMPROVED" : s.trendDirection === "declined" ? "DECLINED" : "NO CHANGE";
+    doc.setFillColor(...trendColor);
+    doc.roundedRect(MARGIN + 2, y, 50, 8, 1.5, 1.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`${trendLabel}  ${s.rateChange > 0 ? "+" : ""}${s.rateChange.toFixed(1)}%`, MARGIN + 27, y + 5.5, { align: "center" });
+    y += 14;
+  }
+
+  // ---- CHART ----
+  if (data.chartData && data.chartData.length > 0) {
+    sectionHeader("Quality Progress Chart");
+
+    const chartX = MARGIN + 5;
+    const chartW = MAX_W - 10;
+    const chartH = 60;
+    const chartY = y + 2;
+    const padL = 14;
+    const padR = 14;
+    const padT = 6;
+    const padB = 12;
+    const innerW = chartW - padL - padR;
+    const innerH = chartH - padT - padB;
+
+    ensure(chartH + 16);
+
+    doc.setFillColor(252, 252, 254);
+    doc.setDrawColor(...BORDER);
+    doc.roundedRect(chartX, chartY, chartW, chartH, 2, 2, "FD");
+
+    const maxRate = 100;
+    const dataPoints = data.chartData;
+
+    const getX = (i: number) => chartX + padL + (dataPoints.length > 1 ? (i / (dataPoints.length - 1)) * innerW : innerW / 2);
+    const getY = (rate: number) => chartY + padT + innerH - (rate / maxRate) * innerH;
+
+    // Grid lines
+    doc.setDrawColor(230, 230, 236);
+    doc.setLineWidth(0.15);
+    for (let pct = 0; pct <= 100; pct += 25) {
+      const gy = getY(pct);
+      doc.line(chartX + padL, gy, chartX + chartW - padR, gy);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(...MUTED);
+      doc.text(`${pct}%`, chartX + padL - 10, gy + 1.5, { align: "right" });
+    }
+
+    // X-axis labels
+    for (let i = 0; i < dataPoints.length; i++) {
+      const px = getX(i);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(...BODY);
+      doc.text(`R${dataPoints[i].round}`, px, chartY + chartH - 3, { align: "center" });
+    }
+
+    // Area fill under the line (using polygon)
+    if (dataPoints.length > 1) {
+      doc.setFillColor(16, 185, 129);
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.1);
+      const pts: [number, number][] = [[getX(0), getY(0)]];
+      for (let i = 0; i < dataPoints.length; i++) {
+        pts.push([getX(i), getY(dataPoints[i].resolutionRate)]);
+      }
+      pts.push([getX(dataPoints.length - 1), getY(0)]);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x1, y1] = pts[i];
+        const [x2, y2] = pts[i + 1];
+        doc.line(x1, y1, x2, y2);
+      }
+    }
+
+    // Line
+    doc.setDrawColor(16, 185, 129);
+    doc.setLineWidth(1.2);
+    for (let i = 0; i < dataPoints.length - 1; i++) {
+      doc.line(getX(i), getY(dataPoints[i].resolutionRate), getX(i + 1), getY(dataPoints[i + 1].resolutionRate));
+    }
+
+    // Dots + value labels
+    for (let i = 0; i < dataPoints.length; i++) {
+      const px = getX(i);
+      const py = getY(dataPoints[i].resolutionRate);
+      doc.setFillColor(16, 185, 129);
+      doc.circle(px, py, 2, "F");
+      doc.setFillColor(255, 255, 255);
+      doc.circle(px, py, 0.8, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(16, 140, 100);
+      doc.text(`${dataPoints[i].resolutionRate}%`, px, py - 4, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6);
+      doc.setTextColor(...MUTED);
+      doc.text(`${dataPoints[i].resolved}/${dataPoints[i].resolved + dataPoints[i].unresolved}`, px, py + 6, { align: "center" });
+    }
+
+    y = chartY + chartH + 8;
+  }
 
   // ---- ROUNDS ----
   for (const round of data.rounds) {
