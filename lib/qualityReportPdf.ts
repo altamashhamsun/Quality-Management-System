@@ -464,8 +464,8 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
           if (itemPhotos && itemPhotos.length > 0) {
             for (const photo of itemPhotos) {
               try {
-                const imgW = MAX_W - 4;
-                const imgH = 90;
+                const imgW = 45;
+                const imgH = 35;
                 ensure(imgH + 8);
                 doc.addImage(photo, "JPEG", MARGIN + 2, y, imgW, imgH);
                 doc.setDrawColor(...BORDER);
