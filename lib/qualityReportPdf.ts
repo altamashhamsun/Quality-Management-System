@@ -466,16 +466,18 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
               try {
                 const props = doc.getImageProperties(photo);
                 const maxW = MAX_W - 4;
-                const maxH = 80;
+                const maxH = 110;
                 let imgW = props.width;
                 let imgH = props.height;
                 if (imgW > maxW) { imgH = (imgH / imgW) * maxW; imgW = maxW; }
                 if (imgH > maxH) { imgW = (imgW / imgH) * maxH; imgH = maxH; }
-                ensure(imgH + 8);
-                doc.addImage(photo, "JPEG", MARGIN + 2, y, imgW, imgH);
-                doc.setDrawColor(...BORDER);
-                doc.rect(MARGIN + 2, y, imgW, imgH, "S");
-                y += imgH + 4;
+                ensure(imgH + 12);
+                const imgX = MARGIN + (MAX_W - imgW) / 2;
+                doc.addImage(photo, "JPEG", imgX, y, imgW, imgH);
+                doc.setDrawColor(80, 80, 90);
+                doc.setLineWidth(0.6);
+                doc.rect(imgX, y, imgW, imgH, "S");
+                y += imgH + 6;
               } catch {
                 // skip invalid image
               }
