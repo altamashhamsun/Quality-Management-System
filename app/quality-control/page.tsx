@@ -729,7 +729,9 @@ export default function QualityControlPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ round: 1, descriptions: descs, previousUnresolved: prevResolved.length > 0 ? prevResolved : undefined }),
         });
-        const result = await res.json();
+        const rawText1 = await res.text();
+        let result: { checklist?: QCItem[]; error?: string };
+        try { result = JSON.parse(rawText1); } catch { throw new Error(rawText1.slice(0, 200) || "Server returned invalid JSON"); }
         if (!res.ok) throw new Error(result.error || "AI failed");
         await supabase
           .from("quality_sessions")
@@ -753,9 +755,9 @@ export default function QualityControlPage() {
           if (data) setSessions((p) => [...p, data as QCSession]);
         }
       } else {
-        const prev = selectedSession.checklist ?? [];
+        const prev = (selectedSession.checklist ?? []).map(({ photos, ...rest }) => rest);
         const answers: Record<string, boolean> = {};
-        for (const item of prev)
+        for (const item of (selectedSession.checklist ?? []))
           if (item.answer !== undefined) answers[item.id] = item.answer;
         const res = await fetch("/api/ai/quality-checklist", {
           method: "POST",
@@ -766,7 +768,9 @@ export default function QualityControlPage() {
             previousAnswers: answers,
           }),
         });
-        const result = await res.json();
+        const rawText = await res.text();
+        let result: { checklist?: QCItem[]; error?: string };
+        try { result = JSON.parse(rawText); } catch { throw new Error(rawText.slice(0, 200) || "Server returned invalid JSON"); }
         if (!res.ok) throw new Error(result.error || "AI failed");
         await supabase
           .from("quality_sessions")
