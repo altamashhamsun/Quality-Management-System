@@ -117,6 +117,9 @@ export default function QualityControlPage() {
   const [reportChartData, setReportChartData] = useState<
     { round: number; resolved: number; unresolved: number }[] | null
   >(null);
+  const [chartImprovement, setChartImprovement] = useState<{
+    fromRound: number; toRound: number; resolvedDelta: number; rateFrom: number; rateTo: number;
+  } | null>(null);
   const [prevUnresolved, setPrevUnresolved] = useState<QCItem[]>([]);
   const [prevResolutions, setPrevResolutions] = useState<Record<string, { id: string | null; solved: boolean; note: string }>>({});
   const prevResolutionsRef = useRef(prevResolutions);
@@ -390,7 +393,7 @@ export default function QualityControlPage() {
 
   function loadReportChart(reportSessions: QCSession[]) {
     const rounds = reportSessions.filter((s) => s.checklist && s.checklist.length > 0);
-    if (rounds.length === 0) { setReportChartData(null); return; }
+    if (rounds.length === 0) { setReportChartData(null); setChartImprovement(null); return; }
     const data: { round: number; resolved: number; unresolved: number }[] = [];
     for (const s of rounds) {
       const resolved = (s.checklist ?? []).filter((i) => i.answer === true).length;
@@ -398,6 +401,21 @@ export default function QualityControlPage() {
       data.push({ round: s.round_number, resolved, unresolved });
     }
     setReportChartData(data.length > 0 ? data : null);
+    if (data.length >= 2) {
+      const first = data[0];
+      const last = data[data.length - 1];
+      const totalFirst = first.resolved + first.unresolved;
+      const totalLast = last.resolved + last.unresolved;
+      setChartImprovement({
+        fromRound: first.round,
+        toRound: last.round,
+        resolvedDelta: last.resolved - first.resolved,
+        rateFrom: totalFirst > 0 ? (first.resolved / totalFirst) * 100 : 0,
+        rateTo: totalLast > 0 ? (last.resolved / totalLast) * 100 : 0,
+      });
+    } else {
+      setChartImprovement(null);
+    }
   }
 
   async function togglePersistentStatus(item: typeof persistentUnresolved[0], resolved: boolean) {
@@ -1254,7 +1272,7 @@ export default function QualityControlPage() {
             </div>
             {reportChartData && reportChartData.length > 0 && (
               <div className="mb-6">
-                <LazyQCChart data={reportChartData.map((d) => ({ round: d.round, Resolved: d.resolved, Unresolved: d.unresolved }))} />
+                <LazyQCChart data={reportChartData.map((d) => ({ round: d.round, Resolved: d.resolved, Unresolved: d.unresolved }))} improvement={chartImprovement} />
               </div>
             )}
             {sessions.length === 0 ? (
