@@ -231,12 +231,12 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
 
     const chartX = MARGIN + 5;
     const chartW = MAX_W - 10;
-    const chartH = 60;
+    const chartH = 70;
     const chartY = y + 2;
-    const padL = 14;
+    const padL = 20;
     const padR = 14;
-    const padT = 6;
-    const padB = 12;
+    const padT = 10;
+    const padB = 18;
     const innerW = chartW - padL - padR;
     const innerH = chartH - padT - padB;
 
@@ -316,6 +316,20 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
     }
 
     y = chartY + chartH + 8;
+
+    // X-axis title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...BODY);
+    doc.text("Round", chartX + padL + innerW / 2, chartY + chartH - 2, { align: "center" });
+
+    // Y-axis title (rotated)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...BODY);
+    const yTitleX = chartX + 3;
+    const yTitleY = chartY + padT + innerH / 2;
+    doc.text("Resolution Rate %", yTitleX, yTitleY, { align: "center", angle: 90 });
   }
 
   // ---- ROUNDS ----
@@ -450,8 +464,8 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
           if (itemPhotos && itemPhotos.length > 0) {
             for (const photo of itemPhotos) {
               try {
-                const imgW = 45;
-                const imgH = 35;
+                const imgW = MAX_W - 4;
+                const imgH = 90;
                 ensure(imgH + 8);
                 doc.addImage(photo, "JPEG", MARGIN + 2, y, imgW, imgH);
                 doc.setDrawColor(...BORDER);

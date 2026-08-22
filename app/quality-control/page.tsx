@@ -85,6 +85,7 @@ export default function QualityControlPage() {
   const [selectedReport, setSelectedReport] = useState<QCReport | null>(null);
   const [sessions, setSessions] = useState<QCSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<QCSession | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [descriptions, setDescriptions] = useState<
     Record<string, { id: string | null; content: string }>
   >({});
@@ -267,6 +268,7 @@ export default function QualityControlPage() {
 
   useEffect(() => {
     if (!selectedReport) return;
+    setSessionsLoading(true);
     (async () => {
       const { data } = await supabase
         .from("quality_sessions")
@@ -276,6 +278,7 @@ export default function QualityControlPage() {
       const sess = (data as QCSession[]) ?? [];
       setSessions(sess);
       loadReportChart(sess);
+      setSessionsLoading(false);
     })();
   }, [selectedReport?.id]);
 
@@ -1342,7 +1345,11 @@ export default function QualityControlPage() {
                 <LazyQCChart data={reportChartData} improvement={chartImprovement} />
               </div>
             )}
-            {sessions.length === 0 ? (
+            {sessionsLoading ? (
+              <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
+                Loading rounds...
+              </p>
+            ) : sessions.length === 0 ? (
               <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 px-6 py-12 text-center text-sm text-zinc-500">
                 No rounds yet. Click &quot;Add Round&quot; to begin.
               </p>
