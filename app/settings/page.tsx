@@ -95,6 +95,10 @@ export default function SettingsPage() {
   const [driveFilter, setDriveFilter] = useState<"all" | "resolved" | "unresolved">("all");
   const [driveFileStatusMap, setDriveFileStatusMap] = useState<Map<string, "resolved" | "unresolved" | "unknown">>(new Map());
   const [driveTestUploading, setDriveTestUploading] = useState(false);
+  const [qcEmbeddedPhotos, setQcEmbeddedPhotos] = useState<
+    { sessionId: string; branchName: string; roundNumber: number; itemName: string; photoIndex: number; dataUrl: string }[]
+  >([]);
+  const [qcPhotoDeleting, setQcPhotoDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -168,6 +172,33 @@ export default function SettingsPage() {
         }
         setDriveFileStatusMap(fileMap);
       }
+
+      const [sessionsRes, branchesRes] = await Promise.all([
+        supabase.from("quality_sessions").select("id, round_number, checklist, report_id"),
+        supabase.from("branches").select("id, name"),
+      ]);
+      const branchMap = new Map<string, string>();
+      for (const b of (branchesRes.data ?? []) as { id: string; name: string }[]) branchMap.set(b.id, b.name);
+      const reportsRes = await supabase.from("quality_reports").select("id, branch_id");
+      const reportBranch = new Map<string, string>();
+      for (const r of (reportsRes.data ?? []) as { id: string; branch_id: string }[]) reportBranch.set(r.id, r.branch_id);
+
+      const embedded: typeof qcEmbeddedPhotos = [];
+      for (const sess of (sessionsRes.data ?? []) as { id: string; round_number: number; checklist: { item: string; photos?: string[] }[] | null; report_id: string }[]) {
+        if (!sess.checklist) continue;
+        const branchId = reportBranch.get(sess.report_id) ?? "";
+        const branchName = branchMap.get(branchId) ?? "Unknown";
+        for (const ci of sess.checklist) {
+          if (ci.photos && ci.photos.length > 0) {
+            ci.photos.forEach((p, pi) => {
+              if (p.startsWith("data:image")) {
+                embedded.push({ sessionId: sess.id, branchName, roundNumber: sess.round_number, itemName: ci.item, photoIndex: pi, dataUrl: p });
+              }
+            });
+          }
+        }
+      }
+      setQcEmbeddedPhotos(embedded);
     } catch {
       setDriveStatus({ configured: false, clientId: false, clientSecret: false, refreshToken: false, folderId: "" });
     }
@@ -335,6 +366,51 @@ export default function SettingsPage() {
     if (mimeType.includes("pdf")) return "\uD83D\uDCC4";
     if (mimeType.includes("video/")) return "\uD83C\uDFAC";
     return "\uD83D\uDCC1";
+  }
+
+  async function deleteEmbeddedQcPhoto(sessionId: string, photoIndex: number, itemName: string) {
+    if (!confirm("Delete this embedded photo from the database?")) return;
+    setQcPhotoDeleting(`${sessionId}-${photoIndex}-${itemName}`);
+    try {
+      const { data: sess } = await supabase.from("quality_sessions").select("checklist").eq("id", sessionId).maybeSingle();
+      if (!sess?.checklist) return;
+      const updated = sess.checklist.map((ci: { item: string; photos?: string[] }) => {
+        if (ci.item !== itemName) return ci;
+        return { ...ci, photos: (ci.photos ?? []).filter((_: string, i: number) => i !== photoIndex) };
+      });
+      await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", sessionId);
+      setQcEmbeddedPhotos((prev) => prev.filter((p) => !(p.sessionId === sessionId && p.photoIndex === photoIndex && p.itemName === itemName)));
+    } finally {
+      setQcPhotoDeleting(null);
+    }
+  }
+
+  async function bulkDeleteEmbeddedQcPhotos() {
+    const totalEmbedded = qcEmbeddedPhotos.length;
+    if (totalEmbedded === 0) return;
+    if (!confirm(`Delete ALL ${totalEmbedded} embedded QC photos from the database? New photos will upload to Drive instead. This cannot be undone.`)) return;
+    setQcPhotoDeleting("bulk");
+    try {
+      const grouped = new Map<string, { sessionId: string; itemName: string; photoIndices: number[] }>();
+      for (const p of qcEmbeddedPhotos) {
+        const key = `${p.sessionId}|${p.itemName}`;
+        const existing = grouped.get(key);
+        if (existing) existing.photoIndices.push(p.photoIndex);
+        else grouped.set(key, { sessionId: p.sessionId, itemName: p.itemName, photoIndices: [p.photoIndex] });
+      }
+      for (const [, group] of grouped) {
+        const { data: sess } = await supabase.from("quality_sessions").select("checklist").eq("id", group.sessionId).maybeSingle();
+        if (!sess?.checklist) continue;
+        const updated = sess.checklist.map((ci: { item: string; photos?: string[] }) => {
+          if (ci.item !== group.itemName) return ci;
+          return { ...ci, photos: (ci.photos ?? []).filter((_: string, i: number) => !group.photoIndices.includes(i)) };
+        });
+        await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", group.sessionId);
+      }
+      setQcEmbeddedPhotos([]);
+    } finally {
+      setQcPhotoDeleting(null);
+    }
   }
 
   return (
@@ -637,6 +713,59 @@ export default function SettingsPage() {
                 </>
               )}
             </section>
+
+            {qcEmbeddedPhotos.length > 0 && (
+              <section className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-5">
+                <div className="mb-1 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                    QC Photos in Database
+                  </h3>
+                  <span className="rounded bg-amber-950 px-2 py-0.5 text-xs text-amber-400">
+                    {qcEmbeddedPhotos.length} photo{qcEmbeddedPhotos.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="mb-4 text-xs text-zinc-500">
+                  These QC photos are stored as base64 in Supabase, not on Google Drive. Delete them to save DB space — new QC photos will upload to Drive instead.
+                </p>
+                <div className="mb-3 flex gap-3">
+                  <button
+                    onClick={bulkDeleteEmbeddedQcPhotos}
+                    disabled={!!qcPhotoDeleting}
+                    className="rounded-lg border border-red-800 px-3 py-1.5 text-xs text-red-400 transition hover:bg-red-950 disabled:opacity-40"
+                  >
+                    {qcPhotoDeleting === "bulk" ? "Deleting..." : `Delete All ${qcEmbeddedPhotos.length} Photos`}
+                  </button>
+                  <button
+                    onClick={loadDriveData}
+                    className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto rounded-lg border border-zinc-800">
+                  {qcEmbeddedPhotos.map((p) => (
+                    <div key={`${p.sessionId}-${p.photoIndex}-${p.itemName}`} className="flex items-center gap-3 border-b border-zinc-800/70 px-3 py-2.5 last:border-b-0 hover:bg-zinc-900/40">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.dataUrl} alt={p.itemName} className="h-14 w-14 shrink-0 rounded-lg border border-zinc-700 object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-zinc-200">{p.itemName}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500">{p.branchName}</span>
+                          <span className="text-[10px] text-zinc-500">Round {p.roundNumber}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteEmbeddedQcPhoto(p.sessionId, p.photoIndex, p.itemName)}
+                        disabled={!!qcPhotoDeleting}
+                        className="shrink-0 rounded border border-red-900 px-2 py-1 text-[10px] text-red-400 transition hover:bg-red-950 disabled:opacity-40"
+                      >
+                        {qcPhotoDeleting === `${p.sessionId}-${p.photoIndex}-${p.itemName}` ? "..." : "Delete"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <div className="flex items-center gap-3">
               <button

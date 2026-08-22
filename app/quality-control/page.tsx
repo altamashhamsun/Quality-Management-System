@@ -1519,6 +1519,32 @@ export default function QualityControlPage() {
                                     setSelectedSession((prev) => prev ? { ...prev, checklist: updated } : prev);
                                     setSessions((prev) => prev.map((s) => s.id === selectedSession?.id ? { ...s, checklist: updated } : s));
                                     await supabase.from("quality_sessions").update({ checklist: updated }).eq("id", selectedSession!.id);
+
+                                    (async () => {
+                                      try {
+                                        const branch = branches.find((b) => b.id === selectedReport?.branch_id);
+                                        const branchSlug = (branch?.name ?? "QC").replace(/[^a-zA-Z0-9]/g, "-").slice(0, 20);
+                                        const datePart = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("");
+                                        const filename = `QC-${branchSlug}-${datePart}-R${selectedSession?.round_number ?? "?"}-${item.item.replace(/[^a-zA-Z0-9]/g, "-").slice(0, 30)}.jpg`;
+                                        const base64 = dataUrl.split(",")[1];
+                                        const res = await fetch("/api/drive/upload", {
+                                          method: "POST",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ filename, base64, mime: "image/jpeg" }),
+                                        });
+                                        const driveData = await res.json();
+                                        if (res.ok && driveData.id) {
+                                          const link = driveData.publicLink ?? driveData.webViewLink ?? "";
+                                          const updatedWithLink = (selectedSession?.checklist ?? []).map((ci) => {
+                                            if (ci.id !== item.id) return ci;
+                                            const p = [...(ci.photos ?? [])];
+                                            p[p.length - 1] = dataUrl;
+                                            return { ...ci, photos: p, driveLinks: [...(ci as Record<string, unknown>).driveLinks as string[] || [], link].filter(Boolean) };
+                                          });
+                                          await supabase.from("quality_sessions").update({ checklist: updatedWithLink }).eq("id", selectedSession!.id);
+                                        }
+                                      } catch { /* Drive upload is best-effort */ }
+                                    })();
                                   };
                                   img.src = reader.result as string;
                                 };
