@@ -69,7 +69,7 @@ export default function QCChart({ data, improvement }: Props) {
               {rateDelta > 0 ? "Improved" : rateDelta < 0 ? "Declined" : "No change"}
             </span>
           </div>
-          {data.map((d) => (
+          {data.filter(d => d.round > 0).map((d) => (
             <div key={d.round} className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2">
               <span className="text-[10px] text-zinc-500 block">Round {d.round}</span>
               <span className="text-sm font-bold text-zinc-200">{d.resolved}/{d.resolved + d.unresolved}</span>
@@ -94,7 +94,7 @@ export default function QCChart({ data, improvement }: Props) {
           <XAxis
             dataKey="round"
             tick={{ fill: "#a1a1aa", fontSize: 13, fontWeight: 600 }}
-            tickFormatter={(v) => `Round ${v}`}
+            tickFormatter={(v) => v === 0 ? "Start" : `Round ${v}`}
             stroke="#3f3f46"
             axisLine={{ stroke: "#3f3f46" }}
           />
@@ -110,7 +110,7 @@ export default function QCChart({ data, improvement }: Props) {
               if (name === "Resolution Rate") return [`${Number(value).toFixed(1)}%`, name];
               return [value, name];
             }}
-            labelFormatter={(v) => `Round ${v}`}
+            labelFormatter={(v) => v === 0 ? "Start (Baseline)" : `Round ${v}`}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }} />
           <ReferenceLine y={50} stroke="#52525b" strokeDasharray="6 3" />
@@ -119,7 +119,11 @@ export default function QCChart({ data, improvement }: Props) {
             dataKey="resolutionRate"
             stroke="#10b981"
             strokeWidth={3}
-            dot={{ r: 6, fill: "#10b981", strokeWidth: 2, stroke: "#050507" }}
+            dot={(props: { cx?: number; cy?: number; payload: ChartDatum }) =>
+              props.payload.round === 0 || props.cx == null || props.cy == null ? null : (
+                <circle key={props.payload.round} cx={props.cx} cy={props.cy} r={6} fill="#10b981" strokeWidth={2} stroke="#050507" />
+              )
+            }
             activeDot={{ r: 8 }}
             name="Resolution Rate"
           />

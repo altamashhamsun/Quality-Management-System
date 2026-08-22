@@ -270,7 +270,7 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
       doc.setTextColor(...BODY);
-      doc.text(`R${dataPoints[i].round}`, px, chartY + chartH - 3, { align: "center" });
+      doc.text(dataPoints[i].round === 0 ? "Start" : `R${dataPoints[i].round}`, px, chartY + chartH - 3, { align: "center" });
     }
 
     // Area fill under the line (using polygon)
@@ -290,19 +290,15 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
       }
     }
 
-    // Line — starts from 0 and connects each round
+    // Line — connects zero baseline through each round
     doc.setDrawColor(16, 185, 129);
     doc.setLineWidth(1.6);
-    // From baseline to first point
-    if (dataPoints.length > 0) {
-      doc.line(getX(0), getY(0), getX(0), getY(dataPoints[0].resolutionRate));
-    }
     for (let i = 0; i < dataPoints.length - 1; i++) {
       doc.line(getX(i), getY(dataPoints[i].resolutionRate), getX(i + 1), getY(dataPoints[i + 1].resolutionRate));
     }
 
-    // Dots + value labels
-    for (let i = 0; i < dataPoints.length; i++) {
+    // Dots + value labels (skip zero starting point)
+    for (let i = 1; i < dataPoints.length; i++) {
       const px = getX(i);
       const py = getY(dataPoints[i].resolutionRate);
       doc.setFillColor(16, 185, 129);

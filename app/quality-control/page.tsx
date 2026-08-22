@@ -404,7 +404,7 @@ export default function QualityControlPage() {
       const total = resolved + unresolved;
       data.push({ round: s.round_number, resolved, unresolved, resolutionRate: total > 0 ? Math.round((resolved / total) * 100) : 0 });
     }
-    setReportChartData(data.length > 0 ? data : null);
+    setReportChartData(data.length > 0 ? [{ round: 0, resolved: 0, unresolved: 0, resolutionRate: 0 }, ...data] : null);
     if (data.length >= 2) {
       const first = data[0];
       const last = data[data.length - 1];
