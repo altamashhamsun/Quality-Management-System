@@ -292,7 +292,7 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
 
     // Line
     doc.setDrawColor(16, 185, 129);
-    doc.setLineWidth(1.2);
+    doc.setLineWidth(1.6);
     for (let i = 0; i < dataPoints.length - 1; i++) {
       doc.line(getX(i), getY(dataPoints[i].resolutionRate), getX(i + 1), getY(dataPoints[i + 1].resolutionRate));
     }
@@ -302,9 +302,9 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
       const px = getX(i);
       const py = getY(dataPoints[i].resolutionRate);
       doc.setFillColor(16, 185, 129);
-      doc.circle(px, py, 2, "F");
+      doc.circle(px, py, 2.5, "F");
       doc.setFillColor(255, 255, 255);
-      doc.circle(px, py, 0.8, "F");
+      doc.circle(px, py, 1, "F");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
       doc.setTextColor(16, 140, 100);
@@ -464,8 +464,13 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
           if (itemPhotos && itemPhotos.length > 0) {
             for (const photo of itemPhotos) {
               try {
-                const imgW = 45;
-                const imgH = 35;
+                const props = doc.getImageProperties(photo);
+                const maxW = MAX_W - 4;
+                const maxH = 80;
+                let imgW = props.width;
+                let imgH = props.height;
+                if (imgW > maxW) { imgH = (imgH / imgW) * maxW; imgW = maxW; }
+                if (imgH > maxH) { imgW = (imgW / imgH) * maxH; imgH = maxH; }
                 ensure(imgH + 8);
                 doc.addImage(photo, "JPEG", MARGIN + 2, y, imgW, imgH);
                 doc.setDrawColor(...BORDER);
