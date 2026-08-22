@@ -742,7 +742,7 @@ export default function QualityControlPage() {
             s.id === selectedSession.id ? { ...s, status: "closed" } : s,
           ),
         );
-        if (result.checklist?.length > 0) {
+        if (result.checklist && result.checklist.length > 0) {
           const { data } = await supabase
             .from("quality_sessions")
             .insert({
@@ -781,7 +781,7 @@ export default function QualityControlPage() {
             s.id === selectedSession.id ? { ...s, status: "closed" } : s,
           ),
         );
-        if (result.checklist?.length > 0) {
+        if (result.checklist && result.checklist.length > 0) {
           const { data } = await supabase
             .from("quality_sessions")
             .insert({
