@@ -10,9 +10,6 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-  Area,
-  ComposedChart,
-  Bar,
 } from "recharts";
 
 type ChartDatum = {
@@ -37,7 +34,7 @@ export default function QCChart({ data, improvement }: Props) {
             Quality Progress by Round
           </h3>
           <p className="text-xs text-zinc-500">
-            Resolution rate % and issue counts across inspection rounds
+            Resolution rate % across inspection rounds
           </p>
         </div>
         {improvement && (
@@ -83,7 +80,10 @@ export default function QCChart({ data, improvement }: Props) {
       )}
 
       <ResponsiveContainer width="100%" height={340}>
-        <ComposedChart data={data} margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+        >
           <defs>
             <linearGradient id="rateGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
@@ -99,18 +99,10 @@ export default function QCChart({ data, improvement }: Props) {
             axisLine={{ stroke: "#3f3f46" }}
           />
           <YAxis
-            yAxisId="rate"
             domain={[0, 100]}
             tick={{ fill: "#a1a1aa", fontSize: 12 }}
             stroke="#3f3f46"
             tickFormatter={(v) => `${v}%`}
-          />
-          <YAxis
-            yAxisId="count"
-            orientation="right"
-            tick={{ fill: "#a1a1aa", fontSize: 12 }}
-            stroke="#3f3f46"
-            allowDecimals={false}
           />
           <Tooltip
             contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", borderRadius: 8, color: "#fafafa", fontSize: 12 }}
@@ -121,17 +113,8 @@ export default function QCChart({ data, improvement }: Props) {
             labelFormatter={(v) => `Round ${v}`}
           />
           <Legend wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }} />
-          <ReferenceLine yAxisId="rate" y={50} stroke="#52525b" strokeDasharray="6 3" />
-          <Area
-            yAxisId="rate"
-            type="monotone"
-            dataKey="resolutionRate"
-            fill="url(#rateGradient)"
-            stroke="none"
-            name="Resolution Rate"
-          />
+          <ReferenceLine y={50} stroke="#52525b" strokeDasharray="6 3" />
           <Line
-            yAxisId="rate"
             type="monotone"
             dataKey="resolutionRate"
             stroke="#10b981"
@@ -140,9 +123,7 @@ export default function QCChart({ data, improvement }: Props) {
             activeDot={{ r: 8 }}
             name="Resolution Rate"
           />
-          <Bar yAxisId="count" dataKey="resolved" fill="#3b82f6" radius={[4, 4, 0, 0]} opacity={0.7} name="Resolved" />
-          <Bar yAxisId="count" dataKey="unresolved" fill="#ef4444" radius={[4, 4, 0, 0]} opacity={0.7} name="Unresolved" />
-        </ComposedChart>
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

@@ -290,9 +290,13 @@ export function downloadQualityReportPdf(data: QualityReportPdfData) {
       }
     }
 
-    // Line
+    // Line — starts from 0 and connects each round
     doc.setDrawColor(16, 185, 129);
     doc.setLineWidth(1.6);
+    // From baseline to first point
+    if (dataPoints.length > 0) {
+      doc.line(getX(0), getY(0), getX(0), getY(dataPoints[0].resolutionRate));
+    }
     for (let i = 0; i < dataPoints.length - 1; i++) {
       doc.line(getX(i), getY(dataPoints[i].resolutionRate), getX(i + 1), getY(dataPoints[i + 1].resolutionRate));
     }
