@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { isResolved } from "@/lib/incident";
+import { downloadBranchRankingPdf, BranchRankingPdfData } from "@/lib/branchRankingPdf";
 
 type NcrRow = {
   id: string;
@@ -86,6 +87,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
   const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
   const [saving, setSaving] = useState(false);
   const [selectedSavedId, setSelectedSavedId] = useState<string>("live");
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const years = Array.from({ length: 10 }, (_, i) => now.getFullYear() - i);
 
@@ -246,6 +248,102 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
     setSaving(false);
   }
 
+  async function downloadPdf() {
+    const winner = mode === "year" ? yearBest : bestBranch;
+    if (!winner) return;
+    setPdfBusy(true);
+    try {
+      const startDate = mode === "month"
+        ? new Date(selectedYear, selectedMonth, 1).toISOString()
+        : new Date(selectedYear, 0, 1).toISOString();
+      const endDate = mode === "month"
+        ? new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString()
+        : new Date(selectedYear, 11, 31, 23, 59, 59).toISOString();
+
+      const branchesRes = await supabase.from("branches").select("id, name");
+      const branchIdMap = new Map<string, string>();
+      for (const b of branchesRes.data ?? []) branchIdMap.set(b.name, b.id);
+
+      const winnerBranchId = branchIdMap.get(winner.branch) ?? null;
+
+      const [ncrRes, incRes] = await Promise.all([
+        supabase
+          .from("ncr_records")
+          .select("id, ncr_number, description, status, opening_ncs, closing_ncs, pictures, drive_links, departments(name, branches(name, id))")
+          .gte("created_at", startDate).lte("created_at", endDate),
+        supabase
+          .from("incidents")
+          .select("id, incident_id, title, severity, branch_name, department_name, status, occurred_at, resolved_at, pictures, drive_links")
+          .gte("created_at", startDate).lte("created_at", endDate),
+      ]);
+
+      const allNcrs = (ncrRes.data ?? []).filter((r) => {
+        const dept = Array.isArray(r.departments) ? r.departments[0] : r.departments;
+        const br = dept?.branches as { name: string } | { name: string }[] | null | undefined;
+        const bName = Array.isArray(br) ? br[0]?.name : (br as { name: string } | null)?.name;
+        return bName === winner.branch;
+      });
+
+      const allIncidents = (incRes.data ?? []).filter((r) => r.branch_name === winner.branch);
+
+      const ncrs = await Promise.all(allNcrs.map(async (r) => {
+        const photos: string[] = [];
+        for (const url of (r.pictures ?? []).slice(0, 3)) {
+          try { const res = await fetch(url); const blob = await res.blob(); const du = await new Promise<string>((ok, err) => { const reader = new FileReader(); reader.onload = () => ok(reader.result as string); reader.onerror = () => err(reader.error); reader.readAsDataURL(blob); }); photos.push(du); } catch { /* skip */ }
+        }
+        return { ncrNumber: r.ncr_number ?? "", description: r.description ?? "", department: (Array.isArray(r.departments) ? r.departments[0] : r.departments)?.name ?? "", resolved: r.status === "Done" || (r.closing_ncs != null && r.closing_ncs > 0), photos };
+      }));
+
+      const incidents = await Promise.all(allIncidents.map(async (r) => {
+        const photos: string[] = [];
+        for (const url of (r.pictures ?? []).slice(0, 3)) {
+          try { const res = await fetch(url); const blob = await res.blob(); const du = await new Promise<string>((ok, err) => { const reader = new FileReader(); reader.onload = () => ok(reader.result as string); reader.onerror = () => err(reader.error); reader.readAsDataURL(blob); }); photos.push(du); } catch { /* skip */ }
+        }
+        return { incidentId: r.incident_id ?? "", title: r.title ?? "", severity: r.severity ?? "", department: r.department_name ?? "", occurredAt: r.occurred_at, resolved: isResolved(r), photos };
+      }));
+
+      let qcData: BranchRankingPdfData["qc"] = undefined;
+      if (includeQc && winnerBranchId) {
+        const reportsRes = await supabase.from("quality_reports").select("id, branch_id").eq("branch_id", winnerBranchId);
+        const reportIds = (reportsRes.data ?? []).map((r) => r.id);
+        const sessionsRes = reportIds.length > 0
+          ? await supabase.from("quality_sessions").select("id, report_id, round_number, created_at, closed_at, checklist").in("report_id", reportIds).gte("created_at", startDate).lte("created_at", endDate)
+          : { data: [] as { id: string; report_id: string; round_number: number; created_at: string; closed_at: string | null; checklist: unknown }[] };
+        const reportBranchMap = new Map<string, string>();
+        for (const r of reportsRes.data ?? []) reportBranchMap.set(r.id, r.branch_id);
+        const sessByReport = new Map<string, typeof sessionsRes.data>();
+        for (const s of sessionsRes.data ?? []) {
+          const arr = sessByReport.get(s.report_id) ?? [];
+          arr.push(s);
+          sessByReport.set(s.report_id, arr);
+        }
+        qcData = {
+          reports: Array.from(sessByReport.entries()).map(([reportId, sessArr]) => ({
+            branchId: reportBranchMap.get(reportId) ?? "",
+            sessions: sessArr!.map((s) => ({ roundNumber: s.round_number, createdAt: s.created_at, closedAt: s.closed_at, checklist: (s.checklist ?? []) as BranchRankingPdfData["qc"] extends undefined ? never : NonNullable<BranchRankingPdfData["qc"]>["reports"][0]["sessions"][0]["checklist"] })),
+          })),
+        } as NonNullable<BranchRankingPdfData["qc"]>;
+      }
+
+      await downloadBranchRankingPdf({
+        mode,
+        month: selectedMonth,
+        year: selectedYear,
+        includeQc,
+        branchName: winner.branch,
+        pct: winner.pct,
+        resolved: winner.resolved,
+        total: winner.total,
+        unresolved: winner.total - winner.resolved,
+        ncrs,
+        incidents,
+        qc: qcData,
+      });
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
   function loadSavedRecord(record: SavedRecord) {
     setSelectedSavedId(record.id);
     setBranchStats([{
@@ -361,7 +459,15 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
       )}
 
       {mode === "month" && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={!bestBranch || pdfBusy}
+            className="rounded-lg border border-zinc-700 bg-zinc-950/60 px-4 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+          >
+            {pdfBusy ? "Preparing PDF..." : "Download PDF"}
+          </button>
           <button
             type="button"
             onClick={saveMonthRecord}
@@ -369,6 +475,19 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
             className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-950/50 disabled:opacity-40"
           >
             {saving ? "Saving..." : "Save Month Record"}
+          </button>
+        </div>
+      )}
+
+      {mode === "year" && savedRecords.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={!yearBest || pdfBusy}
+            className="rounded-lg border border-zinc-700 bg-zinc-950/60 px-4 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-900 disabled:opacity-40"
+          >
+            {pdfBusy ? "Preparing PDF..." : "Download PDF"}
           </button>
         </div>
       )}
