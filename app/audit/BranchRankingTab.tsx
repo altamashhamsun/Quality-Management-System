@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { isResolved } from "@/lib/incident";
-import { downloadBranchRankingPdf, BranchRankingPdfData } from "@/lib/branchRankingPdf";
+import { downloadBranchRankingPdf } from "@/lib/branchRankingPdf";
 
 type NcrRow = {
   id: string;
@@ -249,8 +249,8 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
   }
 
   async function downloadPdf() {
-    const winner = mode === "year" ? yearBest : bestBranch;
-    if (!winner) return;
+    const currentList = mode === "year" ? yearBranchAgg : branchStats;
+    if (currentList.length === 0) return;
     setPdfBusy(true);
     try {
       const startDate = mode === "month"
@@ -260,16 +260,10 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
         ? new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString()
         : new Date(selectedYear, 11, 31, 23, 59, 59).toISOString();
 
-      const branchesRes = await supabase.from("branches").select("id, name");
-      const branchIdMap = new Map<string, string>();
-      for (const b of branchesRes.data ?? []) branchIdMap.set(b.name, b.id);
-
-      const winnerBranchId = branchIdMap.get(winner.branch) ?? null;
-
       const [ncrRes, incRes] = await Promise.all([
         supabase
           .from("ncr_records")
-          .select("id, ncr_number, description, status, opening_ncs, closing_ncs, pictures, drive_links, departments(name, branches(name, id))")
+          .select("id, ncr_number, description, status, opening_ncs, closing_ncs, pictures, drive_links, departments(name, branches(name))")
           .gte("created_at", startDate).lte("created_at", endDate),
         supabase
           .from("incidents")
@@ -277,52 +271,89 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           .gte("created_at", startDate).lte("created_at", endDate),
       ]);
 
-      const allNcrs = (ncrRes.data ?? []).filter((r) => {
-        const dept = Array.isArray(r.departments) ? r.departments[0] : r.departments;
-        const br = dept?.branches as { name: string } | { name: string }[] | null | undefined;
-        const bName = Array.isArray(br) ? br[0]?.name : (br as { name: string } | null)?.name;
-        return bName === winner.branch;
-      });
+      const allNcrRows = ncrRes.data ?? [];
+      const allIncRows = incRes.data ?? [];
 
-      const allIncidents = (incRes.data ?? []).filter((r) => r.branch_name === winner.branch);
+      const branchesRes = await supabase.from("branches").select("id, name");
+      const branchNameToId = new Map<string, string>();
+      for (const b of branchesRes.data ?? []) branchNameToId.set(b.name, b.id);
 
-      const ncrs = await Promise.all(allNcrs.map(async (r) => {
+      let qcReportsRaw: { id: string; branch_id: string }[] = [];
+      let qcSessionsRaw: { id: string; report_id: string; round_number: number; created_at: string; closed_at: string | null; checklist: unknown }[] = [];
+      if (includeQc) {
+        const [qr, qs] = await Promise.all([
+          supabase.from("quality_reports").select("id, branch_id"),
+          supabase.from("quality_sessions").select("id, report_id, round_number, created_at, closed_at, checklist").gte("created_at", startDate).lte("created_at", endDate),
+        ]);
+        qcReportsRaw = (qr.data ?? []) as typeof qcReportsRaw;
+        qcSessionsRaw = (qs.data ?? []) as typeof qcSessionsRaw;
+      }
+
+      const reportToBranchId = new Map<string, string>();
+      for (const r of qcReportsRaw) reportToBranchId.set(r.id, r.branch_id);
+
+      async function fetchPhotos(urls: (string | null)[]): Promise<string[]> {
         const photos: string[] = [];
-        for (const url of (r.pictures ?? []).slice(0, 3)) {
-          try { const res = await fetch(url); const blob = await res.blob(); const du = await new Promise<string>((ok, err) => { const reader = new FileReader(); reader.onload = () => ok(reader.result as string); reader.onerror = () => err(reader.error); reader.readAsDataURL(blob); }); photos.push(du); } catch { /* skip */ }
+        for (const url of urls.filter(Boolean).slice(0, 3)) {
+          try { const res = await fetch(url!); const blob = await res.blob(); const du = await new Promise<string>((ok, err) => { const reader = new FileReader(); reader.onload = () => ok(reader.result as string); reader.onerror = () => err(reader.error); reader.readAsDataURL(blob); }); photos.push(du); } catch { /* skip */ }
         }
-        return { ncrNumber: r.ncr_number ?? "", description: r.description ?? "", department: (Array.isArray(r.departments) ? r.departments[0] : r.departments)?.name ?? "", resolved: r.status === "Done" || (r.closing_ncs != null && r.closing_ncs > 0), photos };
-      }));
+        return photos;
+      }
 
-      const incidents = await Promise.all(allIncidents.map(async (r) => {
-        const photos: string[] = [];
-        for (const url of (r.pictures ?? []).slice(0, 3)) {
-          try { const res = await fetch(url); const blob = await res.blob(); const du = await new Promise<string>((ok, err) => { const reader = new FileReader(); reader.onload = () => ok(reader.result as string); reader.onerror = () => err(reader.error); reader.readAsDataURL(blob); }); photos.push(du); } catch { /* skip */ }
-        }
-        return { incidentId: r.incident_id ?? "", title: r.title ?? "", severity: r.severity ?? "", department: r.department_name ?? "", occurredAt: r.occurred_at, resolved: isResolved(r), photos };
-      }));
+      const branches: import("@/lib/branchRankingPdf").BranchPdfBranch[] = [];
 
-      let qcData: BranchRankingPdfData["qc"] = undefined;
-      if (includeQc && winnerBranchId) {
-        const reportsRes = await supabase.from("quality_reports").select("id, branch_id").eq("branch_id", winnerBranchId);
-        const reportIds = (reportsRes.data ?? []).map((r) => r.id);
-        const sessionsRes = reportIds.length > 0
-          ? await supabase.from("quality_sessions").select("id, report_id, round_number, created_at, closed_at, checklist").in("report_id", reportIds).gte("created_at", startDate).lte("created_at", endDate)
-          : { data: [] as { id: string; report_id: string; round_number: number; created_at: string; closed_at: string | null; checklist: unknown }[] };
-        const reportBranchMap = new Map<string, string>();
-        for (const r of reportsRes.data ?? []) reportBranchMap.set(r.id, r.branch_id);
-        const sessByReport = new Map<string, typeof sessionsRes.data>();
-        for (const s of sessionsRes.data ?? []) {
-          const arr = sessByReport.get(s.report_id) ?? [];
-          arr.push(s);
-          sessByReport.set(s.report_id, arr);
+      for (let i = 0; i < currentList.length; i++) {
+        const stat = currentList[i];
+        const branchNcrs = allNcrRows.filter((r) => {
+          const dept = Array.isArray(r.departments) ? r.departments[0] : r.departments;
+          const br = dept?.branches as { name: string } | { name: string }[] | null | undefined;
+          const bName = Array.isArray(br) ? br[0]?.name : (br as { name: string } | null)?.name;
+          return bName === stat.branch;
+        });
+        const branchInc = allIncRows.filter((r) => r.branch_name === stat.branch);
+
+        const ncrItems = await Promise.all(branchNcrs.map(async (r) => ({
+          ncrNumber: r.ncr_number ?? "",
+          description: r.description ?? "",
+          department: (Array.isArray(r.departments) ? r.departments[0] : r.departments)?.name ?? "",
+          resolved: r.status === "Done" || (r.closing_ncs != null && r.closing_ncs > 0),
+          photos: await fetchPhotos(r.pictures ?? []),
+        })));
+
+        const incItems = await Promise.all(branchInc.map(async (r) => ({
+          incidentId: r.incident_id ?? "",
+          title: r.title ?? "",
+          severity: r.severity ?? "",
+          department: r.department_name ?? "",
+          occurredAt: r.occurred_at,
+          resolved: isResolved(r),
+          photos: await fetchPhotos(r.pictures ?? []),
+        })));
+
+        let qcSessions: import("@/lib/branchRankingPdf").BranchPdfQcSession[] = [];
+        if (includeQc) {
+          const branchId = branchNameToId.get(stat.branch) ?? null;
+          const reportIds = branchId ? qcReportsRaw.filter((r) => r.branch_id === branchId).map((r) => r.id) : [];
+          const sessForBranch = qcSessionsRaw.filter((s) => reportIds.includes(s.report_id));
+          qcSessions = sessForBranch.map((s) => ({
+            roundNumber: s.round_number,
+            createdAt: s.created_at,
+            closedAt: s.closed_at,
+            checklist: (s.checklist ?? []) as import("@/lib/branchRankingPdf").BranchPdfQcSession["checklist"],
+          }));
         }
-        qcData = {
-          reports: Array.from(sessByReport.entries()).map(([reportId, sessArr]) => ({
-            branchId: reportBranchMap.get(reportId) ?? "",
-            sessions: sessArr!.map((s) => ({ roundNumber: s.round_number, createdAt: s.created_at, closedAt: s.closed_at, checklist: (s.checklist ?? []) as BranchRankingPdfData["qc"] extends undefined ? never : NonNullable<BranchRankingPdfData["qc"]>["reports"][0]["sessions"][0]["checklist"] })),
-          })),
-        } as NonNullable<BranchRankingPdfData["qc"]>;
+
+        branches.push({
+          branch: stat.branch,
+          rank: i + 1,
+          pct: stat.pct,
+          resolved: stat.resolved,
+          total: stat.total,
+          unresolved: stat.unresolved,
+          ncrs: ncrItems,
+          incidents: incItems,
+          qcSessions,
+        });
       }
 
       await downloadBranchRankingPdf({
@@ -330,14 +361,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
         month: selectedMonth,
         year: selectedYear,
         includeQc,
-        branchName: winner.branch,
-        pct: winner.pct,
-        resolved: winner.resolved,
-        total: winner.total,
-        unresolved: winner.total - winner.resolved,
-        ncrs,
-        incidents,
-        qc: qcData,
+        branches,
       });
     } finally {
       setPdfBusy(false);
@@ -374,7 +398,11 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
         branch,
         resolved: v.resolved,
         total: v.total,
+        unresolved: v.total - v.resolved,
         pct: v.total === 0 ? 0 : Math.round((v.resolved / v.total) * 100),
+        ncrs: 0,
+        incidents: 0,
+        qc: 0,
         months: v.months,
       }))
       .sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
