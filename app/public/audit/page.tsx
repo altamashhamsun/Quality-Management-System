@@ -52,21 +52,39 @@ function PublicAuditContent() {
   const [dataLoading, setDataLoading] = useState(true);
   const [departments, setDepartments] = useState<PlanDepartment[]>([]);
   const [viewing, setViewing] = useState<AuditDocument | null>(null);
+  const [branchAwardsEnabled, setBranchAwardsEnabled] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [docsResult, deptsResult] = await Promise.all([
+      const [docsResult, deptsResult, settingsResult] = await Promise.all([
         supabase
           .from("audit_documents")
           .select("*")
           .order("created_at", { ascending: true }),
         supabase.from("departments").select("id, name, branches(name)"),
+        supabase
+          .from("settings")
+          .select("public_branch_awards")
+          .eq("id", 1)
+          .maybeSingle(),
       ]);
       if (!docsResult.error) setDocuments((docsResult.data ?? []) as AuditDocument[]);
       if (!deptsResult.error) setDepartments(deptsResult.data ?? []);
+      if (!settingsResult.error && settingsResult.data) {
+        setBranchAwardsEnabled(settingsResult.data.public_branch_awards ?? true);
+      }
       setDataLoading(false);
     })();
   }, []);
+
+  const visibleTabs = useMemo(
+    () => TABS.filter((tab) => branchAwardsEnabled || (tab.key !== "branchMonth" && tab.key !== "branchYear")),
+    [branchAwardsEnabled],
+  );
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.key === activeTab)) setActiveTab("plan");
+  }, [visibleTabs, activeTab]);
 
   const activeDocuments = documents.filter((doc) => doc.category === activeTab);
 
@@ -95,7 +113,7 @@ function PublicAuditContent() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const active = tab.key === activeTab;
           const count = tab.key !== "auditor" && tab.key !== "auditReport" && tab.key !== "branchMonth" && tab.key !== "branchYear"
             ? documents.filter((doc) => doc.category === tab.key).length

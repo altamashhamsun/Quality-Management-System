@@ -14,6 +14,7 @@ type SettingsRow = {
   public_calendar: boolean;
   public_audit: boolean;
   public_hasm: boolean;
+  public_branch_awards: boolean;
 };
 
 const PUBLIC_TOGGLES = [
@@ -22,6 +23,7 @@ const PUBLIC_TOGGLES = [
   { key: "public_calendar", label: "Calendar", path: "/public/calendar" },
   { key: "public_audit", label: "Audit", path: "/public/audit" },
   { key: "public_hasm", label: "HASM", path: "/public/hasm" },
+  { key: "public_branch_awards", label: "Branch of the Month/Year", path: "Visible inside Audit page" },
 ] as const;
 
 type ToggleKey = (typeof PUBLIC_TOGGLES)[number]["key"];
@@ -75,6 +77,7 @@ export default function SettingsPage() {
     public_calendar: true,
     public_audit: true,
     public_hasm: true,
+    public_branch_awards: true,
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
@@ -119,6 +122,7 @@ export default function SettingsPage() {
             public_calendar: settings.public_calendar,
             public_audit: settings.public_audit,
             public_hasm: settings.public_hasm,
+            public_branch_awards: settings.public_branch_awards,
           });
         }
       });
@@ -255,6 +259,7 @@ export default function SettingsPage() {
         public_calendar: toggles.public_calendar,
         public_audit: toggles.public_audit,
         public_hasm: toggles.public_hasm,
+        public_branch_awards: toggles.public_branch_awards,
       })
       .eq("id", 1);
     setSaving(false);
