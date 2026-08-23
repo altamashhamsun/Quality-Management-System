@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { isResolved } from "@/lib/incident";
 
@@ -47,6 +47,22 @@ type BranchStat = {
   qc: number;
 };
 
+type SavedRecord = {
+  id: string;
+  month: number;
+  year: number;
+  branch_id: string;
+  branch_name: string;
+  resolved: number;
+  total: number;
+  pct: number;
+  ncrs: number;
+  incidents: number;
+  qc: number;
+  include_qc: boolean;
+  created_at: string;
+};
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -67,6 +83,9 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
   const [loading, setLoading] = useState(true);
   const [branchStats, setBranchStats] = useState<BranchStat[]>([]);
   const [includeQc, setIncludeQc] = useState(true);
+  const [savedRecords, setSavedRecords] = useState<SavedRecord[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [selectedSavedId, setSelectedSavedId] = useState<string>("live");
 
   const years = Array.from({ length: 10 }, (_, i) => now.getFullYear() - i);
 
@@ -75,7 +94,25 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
       ? `${MONTHS[selectedMonth]} ${selectedYear}`
       : String(selectedYear);
 
+  const fetchSavedRecords = useCallback(async () => {
+    let query = supabase
+      .from("branch_of_month_records")
+      .select("*")
+      .order("year", { ascending: false })
+      .order("month", { ascending: false });
+    if (mode === "year") {
+      query = query.eq("year", selectedYear);
+    }
+    const { data } = await query;
+    setSavedRecords((data as SavedRecord[]) ?? []);
+  }, [mode, selectedYear]);
+
   useEffect(() => {
+    fetchSavedRecords();
+  }, [fetchSavedRecords]);
+
+  useEffect(() => {
+    if (selectedSavedId !== "live") return;
     setLoading(true);
     (async () => {
       const startDate =
@@ -182,9 +219,70 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
       setBranchStats(stats);
       setLoading(false);
     })();
-  }, [mode, selectedMonth, selectedYear, includeQc]);
+  }, [mode, selectedMonth, selectedYear, includeQc, selectedSavedId]);
 
   const bestBranch = branchStats[0] ?? null;
+
+  async function saveMonthRecord() {
+    if (!bestBranch) return;
+    setSaving(true);
+    await supabase.from("branch_of_month_records").upsert(
+      {
+        month: selectedMonth,
+        year: selectedYear,
+        branch_id: "00000000-0000-0000-0000-000000000000",
+        branch_name: bestBranch.branch,
+        resolved: bestBranch.resolved,
+        total: bestBranch.total,
+        pct: bestBranch.pct,
+        ncrs: bestBranch.ncrs,
+        incidents: bestBranch.incidents,
+        qc: bestBranch.qc,
+        include_qc: includeQc,
+      },
+      { onConflict: "month,year" }
+    );
+    await fetchSavedRecords();
+    setSaving(false);
+  }
+
+  function loadSavedRecord(record: SavedRecord) {
+    setSelectedSavedId(record.id);
+    setBranchStats([{
+      branch: record.branch_name,
+      total: record.total,
+      resolved: record.resolved,
+      unresolved: record.total - record.resolved,
+      pct: record.pct,
+      ncrs: record.ncrs,
+      incidents: record.incidents,
+      qc: record.qc,
+    }]);
+    setLoading(false);
+  }
+
+  const yearBranchAgg = (() => {
+    if (mode !== "year") return [];
+    const map = new Map<string, { resolved: number; total: number; months: number }>();
+    for (const r of savedRecords) {
+      const existing = map.get(r.branch_name) ?? { resolved: 0, total: 0, months: 0 };
+      existing.resolved += r.resolved;
+      existing.total += r.total;
+      existing.months += 1;
+      map.set(r.branch_name, existing);
+    }
+    return [...map.entries()]
+      .map(([branch, v]) => ({
+        branch,
+        resolved: v.resolved,
+        total: v.total,
+        pct: v.total === 0 ? 0 : Math.round((v.resolved / v.total) * 100),
+        months: v.months,
+      }))
+      .sort((a, b) => b.pct - a.pct || b.resolved - a.resolved);
+  })();
+
+  const yearBest = yearBranchAgg[0] ?? null;
 
   return (
     <div className="space-y-6">
@@ -193,7 +291,9 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">
             {mode === "month" ? "Branch of the Month" : "Branch of the Year"}
           </h3>
-          <p className="text-xs text-zinc-500">{periodLabel} &mdash; ranked by issue resolution rate</p>
+          <p className="text-xs text-zinc-500">
+            {mode === "year" ? "Aggregated from saved monthly records" : `${periodLabel} — ranked by issue resolution rate`}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -213,7 +313,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           {mode === "month" && (
             <select
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              onChange={(e) => { setSelectedMonth(Number(e.target.value)); setSelectedSavedId("live"); }}
               className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
             >
               {MONTHS.map((m, i) => (
@@ -223,7 +323,7 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
           )}
           <select
             value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            onChange={(e) => { setSelectedYear(Number(e.target.value)); setSelectedSavedId("live"); }}
             className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
           >
             {years.map((y) => (
@@ -233,93 +333,240 @@ export default function BranchRankingTab({ mode }: { mode: "month" | "year" }) {
         </div>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-zinc-500">Loading...</p>
-      ) : !bestBranch ? (
-        <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
-          No data for {periodLabel} yet.
-        </p>
+      {mode === "month" && savedRecords.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-500">Saved Records:</span>
+          <select
+            value={selectedSavedId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedSavedId(val);
+              if (val === "live") {
+                setLoading(true);
+              } else {
+                const record = savedRecords.find((r) => r.id === val);
+                if (record) loadSavedRecord(record);
+              }
+            }}
+            className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-50 focus:outline-none focus:ring-1 focus:ring-zinc-700"
+          >
+            <option value="live">Live Data (current)</option>
+            {savedRecords.map((r) => (
+              <option key={r.id} value={r.id}>
+                {MONTHS[r.month]} {r.year} — {r.branch_name} ({r.pct}%)
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {mode === "month" && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={saveMonthRecord}
+            disabled={!bestBranch || saving}
+            className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-950/50 disabled:opacity-40"
+          >
+            {saving ? "Saving..." : "Save Month Record"}
+          </button>
+        </div>
+      )}
+
+      {mode === "month" ? (
+        loading ? (
+          <p className="text-sm text-zinc-500">Loading...</p>
+        ) : !bestBranch ? (
+          <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+            No data for {periodLabel} yet.
+          </p>
+        ) : (
+          <>
+            <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                    Monthly Champion
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-zinc-50">{bestBranch.branch}</p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    {bestBranch.resolved} of {bestBranch.total} issues resolved
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-4xl font-bold text-amber-400">{bestBranch.pct}%</p>
+                  <p className="mt-1 text-xs text-zinc-500">resolution rate</p>
+                </div>
+              </div>
+              <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-zinc-800">
+                <div
+                  className="h-full rounded-full bg-amber-400"
+                  style={{ width: `${bestBranch.pct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {branchStats.map((b, i) => (
+                <div
+                  key={b.branch}
+                  className={`rounded-xl border p-4 transition-all ${
+                    i === 0
+                      ? "border-amber-700/50 bg-amber-950/20"
+                      : "border-zinc-800 bg-zinc-950/60"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                        style={{
+                          backgroundColor: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#27272a",
+                          color: i < 3 ? "#000" : "#71717a",
+                        }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="text-sm font-semibold text-zinc-100">{b.branch}</span>
+                    </div>
+                    <span className="text-2xl font-bold text-zinc-50">{b.pct}%</span>
+                  </div>
+                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${b.pct}%`,
+                        backgroundColor: b.pct >= 80 ? "#16a34a" : b.pct >= 50 ? "#d97706" : "#dc2626",
+                      }}
+                    />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-100">{b.ncrs}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">NCRs</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-100">{b.incidents}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">Incidents</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold text-zinc-100">{b.qc}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500">QC</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
+                    <span className="text-emerald-400">{b.resolved} resolved</span>
+                    <span className="text-red-400">{b.unresolved} unresolved</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )
       ) : (
         <>
-          <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
-                  {mode === "month" ? "Monthly Champion" : "Yearly Champion"}
-                </p>
-                <p className="mt-2 text-3xl font-bold text-zinc-50">{bestBranch.branch}</p>
-                <p className="mt-1 text-sm text-zinc-400">
-                  {bestBranch.resolved} of {bestBranch.total} issues resolved
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-4xl font-bold text-amber-400">{bestBranch.pct}%</p>
-                <p className="mt-1 text-xs text-zinc-500">resolution rate</p>
-              </div>
-            </div>
-            <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-zinc-800">
-              <div
-                className="h-full rounded-full bg-amber-400"
-                style={{ width: `${bestBranch.pct}%` }}
-              />
-            </div>
-          </div>
+          {savedRecords.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-12 text-center text-sm text-zinc-500">
+              No saved monthly records for {selectedYear}. Save monthly records first.
+            </p>
+          ) : (
+            <>
+              {yearBest && (
+                <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">
+                        Yearly Champion
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-zinc-50">{yearBest.branch}</p>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        {yearBest.resolved} of {yearBest.total} issues resolved across {yearBest.months} months
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-4xl font-bold text-amber-400">{yearBest.pct}%</p>
+                      <p className="mt-1 text-xs text-zinc-500">resolution rate</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-amber-400"
+                      style={{ width: `${yearBest.pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {branchStats.map((b, i) => (
-              <div
-                key={b.branch}
-                className={`rounded-xl border p-4 transition-all ${
-                  i === 0
-                    ? "border-amber-700/50 bg-amber-950/20"
-                    : "border-zinc-800 bg-zinc-950/60"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
-                      style={{
-                        backgroundColor: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#27272a",
-                        color: i < 3 ? "#000" : "#71717a",
-                      }}
-                    >
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-semibold text-zinc-100">{b.branch}</span>
-                  </div>
-                  <span className="text-2xl font-bold text-zinc-50">{b.pct}%</span>
-                </div>
-                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {yearBranchAgg.map((b, i) => (
                   <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${b.pct}%`,
-                      backgroundColor: b.pct >= 80 ? "#16a34a" : b.pct >= 50 ? "#d97706" : "#dc2626",
-                    }}
-                  />
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-lg font-semibold text-zinc-100">{b.ncrs}</p>
-                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">NCRs</p>
+                    key={b.branch}
+                    className={`rounded-xl border p-4 transition-all ${
+                      i === 0
+                        ? "border-amber-700/50 bg-amber-950/20"
+                        : "border-zinc-800 bg-zinc-950/60"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                          style={{
+                            backgroundColor: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#b45309" : "#27272a",
+                            color: i < 3 ? "#000" : "#71717a",
+                          }}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-zinc-100">{b.branch}</span>
+                      </div>
+                      <span className="text-2xl font-bold text-zinc-50">{b.pct}%</span>
+                    </div>
+                    <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${b.pct}%`,
+                          backgroundColor: b.pct >= 80 ? "#16a34a" : b.pct >= 50 ? "#d97706" : "#dc2626",
+                        }}
+                      />
+                    </div>
+                    <div className="mt-3 flex justify-between text-[10px] text-zinc-500">
+                      <span className="text-emerald-400">{b.resolved} resolved</span>
+                      <span className="text-red-400">{b.total - b.resolved} unresolved</span>
+                      <span>{b.months} month{b.months !== 1 ? "s" : ""}</span>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-lg font-semibold text-zinc-100">{b.incidents}</p>
-                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Incidents</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-semibold text-zinc-100">{b.qc}</p>
-                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">QC</p>
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
-                  <span className="text-emerald-400">{b.resolved} resolved</span>
-                  <span className="text-red-400">{b.unresolved} unresolved</span>
+                ))}
+              </div>
+
+              <div className="mt-4">
+                <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                  Monthly Breakdown — {selectedYear}
+                </h4>
+                <div className="space-y-2">
+                  {savedRecords.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/60 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-950 text-[11px] font-bold text-amber-400">
+                          {r.month + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-zinc-100">{MONTHS[r.month]}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-zinc-300">{r.branch_name}</span>
+                        <span className="text-lg font-bold text-amber-400">{r.pct}%</span>
+                        <span className="text-[10px] text-zinc-500">{r.resolved}/{r.total}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </>
       )}
     </div>
