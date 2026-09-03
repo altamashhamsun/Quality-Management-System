@@ -12,6 +12,61 @@
   --border: #e2e8f0;
 }
 
+/* ---- SAP Fiori / Horizon theme (blue & white) ---- */
+@theme {
+  --color-sap-header: #1d2b3f;
+  --color-sap-header-hover: rgba(255, 255, 255, 0.12);
+  --color-sap-accent: #96c7ff;
+  --color-sap-primary: #0070f2;
+  --color-sap-primary-hover: #0064d8;
+  --color-sap-bg: #f2f4f8;
+  --color-sap-border: #d9d9d9;
+  --color-sap-text: #1d2b3f;
+  --color-sap-muted: #708090;
+  --color-sap-item-active: #eef4ff;
+  --color-sap-item-hover: #f5f6f7;
+  --color-sap-table-head: #f7f7f7;
+  --color-sap-row-alt: #fbfbfb;
+  --color-sap-badge: #e5f1ff;
+  --color-sap-form-bg: #fafafa;
+  --color-sap-status: #1d2b3f;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* SAP-flavored scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c8c8c8;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 * {
   box-sizing: border-box;
   padding: 0;
