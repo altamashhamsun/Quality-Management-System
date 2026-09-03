@@ -12,26 +12,15 @@ import {
   RefreshCw,
   LogOut,
   FileCheck,
-  LayoutDashboard,
-  Settings,
-  User,
   Bell,
-  Menu,
   ChevronDown,
   Search,
-  Factory,
-  Users,
-  CalendarClock,
   ClipboardCheck,
-  Home,
-  FolderOpen,
-  Database,
-  FileText,
+  CalendarClock,
   HelpCircle,
   PanelLeft,
-  Minimize2,
-  Maximize2,
   Building2,
+  ArrowUpRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/browser";
 
@@ -56,19 +45,6 @@ interface QualityRecord {
   updated_at: string;
 }
 
-const SAP_NAV = [
-  { icon: Home, label: "Home", active: true },
-  { icon: LayoutDashboard, label: "Dashboard" },
-  { icon: ClipboardList, label: "Quality Records" },
-  { icon: ClipboardCheck, label: "Audits" },
-  { icon: FileCheck, label: "NCR" },
-  { icon: CalendarClock, label: "Calendar" },
-  { icon: Factory, label: "Branches" },
-  { icon: Users, label: "Users" },
-  { icon: Database, label: "Data" },
-  { icon: Settings, label: "Settings" },
-];
-
 export default function Dashboard() {
   const router = useRouter();
   const [records, setRecords] = useState<QualityRecord[]>([]);
@@ -81,7 +57,7 @@ export default function Dashboard() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [activeNav, setActiveNav] = useState("Home");
+  const [activeNav, setActiveNav] = useState("Dashboard");
 
   const fetchRecords = useCallback(async () => {
     const supabase = createClient();
@@ -170,8 +146,8 @@ export default function Dashboard() {
 
   const statusColor: Record<Status, string> = {
     Open: "#e78a07",
-    "In Progress": "#0070f2",
-    Closed: "#107e3e",
+    "In Progress": "#2563eb",
+    Closed: "#16a34a",
   };
 
   const typeIcon = {
@@ -183,95 +159,107 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-sap-bg">
-        <div className="text-blue-600 animate-pulse flex items-center gap-2">
-          <ShieldCheck className="w-6 h-6" /> Loading QMS...
+      <div className="h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <div className="text-blue-600 animate-pulse flex items-center gap-2 text-[15px] font-medium">
+          <ShieldCheck className="w-6 h-6" /> Loading Audit Portal...
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col bg-sap-bg overflow-hidden">
-      {/* ===== SAP SHELL BAR (top) ===== */}
-      <header className="bg-sap-header text-white h-12 shrink-0 flex items-center px-3 gap-2 shadow-md z-20">
+    <div className="h-screen flex flex-col bg-[#F8FAFC] overflow-hidden">
+      {/* ===== MODERN HEADER ===== */}
+      <header className="bg-[#0B1F3A] text-white h-16 shrink-0 flex items-center px-4 md:px-6 gap-3 shadow-md z-20">
         <button
           onClick={() => setNavOpen(!navOpen)}
-          className="p-1.5 rounded hover:bg-sap-header-hover"
+          className="p-2 -ml-1 rounded-lg hover:bg-white/10 transition-colors"
           aria-label="Toggle navigation"
         >
-          {navOpen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+          <PanelLeft className="w-5 h-5" />
         </button>
-        <div className="flex items-center gap-2 border-r border-sap-header-hover pr-3">
-          <Building2 className="w-5 h-5 text-sap-accent" />
-          <span className="font-semibold tracking-wide text-[15px]">QMS Portal</span>
-        </div>
 
-        <nav className="hidden lg:flex items-center gap-1 ml-2 text-[13px]">
-          {["Home", "Dashboard", "Quality", "Reports", "Administration"].map((item) => (
-            <button
-              key={item}
-              className="px-3 py-1.5 rounded-sm hover:bg-sap-header-hover whitespace-nowrap"
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-[10px] bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/30">
+            <ClipboardCheck className="w-5 h-5" />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-semibold text-[15px] tracking-tight">
+              Audit Portal
+            </span>
+            <span className="text-[11px] text-blue-200/60 hidden sm:block">
+              Quality · Compliance · Continuous Improvement
+            </span>
+          </div>
+        </div>
 
         <div className="flex-1" />
 
-        <div className="hidden md:flex items-center gap-2 bg-sap-header-hover rounded px-2 py-1 text-[13px]">
-          <Search className="w-4 h-4 text-sap-accent" />
+        <div className="hidden md:flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5 text-[13px]">
+          <Search className="w-4 h-4 text-blue-200/70" />
           <input
             placeholder="Search"
-            className="bg-transparent outline-none placeholder-sap-accent w-40"
+            className="bg-transparent outline-none placeholder-blue-200/60 w-40 text-white"
           />
         </div>
 
-        <button className="p-1.5 rounded hover:bg-sap-header-hover ml-1" aria-label="Notifications">
+        <button
+          className="relative p-2 rounded-lg hover:bg-white/10 transition-colors"
+          aria-label="Notifications"
+        >
           <Bell className="w-5 h-5" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500" />
         </button>
-        <div className="w-px h-6 bg-sap-header-hover mx-1" />
+
+        <div className="w-px h-6 bg-white/15 mx-1" />
+
         <div className="flex items-center gap-2 group cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-sap-accent text-sap-header flex items-center justify-center text-sm font-semibold">
+          <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
             {userEmail ? userEmail[0].toUpperCase() : "U"}
           </div>
-          <ChevronDown className="w-4 h-4 text-sap-accent" />
+          <div className="hidden lg:block leading-tight">
+            <span className="text-[13px] font-medium block">
+              {userEmail?.split("@")[0] || "User"}
+            </span>
+          </div>
+          <ChevronDown className="w-4 h-4 text-blue-200/70" />
         </div>
+
         <button
           onClick={signOut}
-          className="flex items-center gap-1 p-1.5 rounded hover:bg-sap-header-hover ml-1"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-[13px] font-medium"
           title="Sign out"
         >
-          <LogOut className="w-5 h-5" />
-          <span className="hidden xl:inline text-[13px]">Sign out</span>
+          <LogOut className="w-[18px] h-[18px]" />
+          <span className="hidden xl:inline">Sign out</span>
         </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ===== SAP NAVIGATION (left) ===== */}
+        {/* ===== SIDEBAR ===== */}
         <aside
-          className={`bg-white border-r border-sap-border transition-all duration-200 overflow-hidden ${
-            navOpen ? "w-56" : "w-0"
+          className={`bg-white border-r border-slate-200 transition-all duration-200 overflow-hidden ${
+            navOpen ? "w-60" : "w-0"
           }`}
         >
-          <div className="h-full overflow-y-auto py-2">
-            <div className="px-4 pb-2 pt-1 text-[11px] font-bold text-sap-muted uppercase tracking-wide flex items-center gap-1">
-              <PanelLeft className="w-3.5 h-3.5" /> Navigation
+          <div className="h-full overflow-y-auto py-4">
+            <div className="px-5 pb-2 pt-1 text-[11px] font-semibold text-slate-400 uppercase tracking-widest">
+              Workspace
             </div>
-            {SAP_NAV.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
+              const active = activeNav === item.label;
               return (
                 <button
                   key={item.label}
                   onClick={() => {
                     setActiveNav(item.label);
-                    if (item.label !== "Home") setShowForm(false);
+                    setShowForm(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-4 py-2 text-[13px] transition-colors border-l-[3px] ${
-                    activeNav === item.label
-                      ? "text-sap-primary border-sap-primary bg-sap-item-active font-semibold"
-                      : "border-transparent text-sap-text hover:bg-sap-item-hover"
+                  className={`w-full flex items-center gap-3 px-5 py-2.5 text-[14px] transition-colors ${
+                    active
+                      ? "text-blue-600 bg-blue-50 font-medium"
+                      : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   <Icon className="w-[18px] h-[18px]" />
@@ -282,90 +270,84 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        {/* ===== SAP CONTENT ===== */}
+        {/* ===== CONTENT ===== */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-5">
-            {/* SAP-style breadcrumb/context header */}
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-[11px] text-sap-muted flex items-center gap-1.5">
-                <Home className="w-3.5 h-3.5" /> / {activeNav}
+          <div className="p-5 md:p-8 max-w-[1400px] mx-auto">
+            {/* page header */}
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-1.5 text-[12px] text-slate-400 font-medium uppercase tracking-widest mb-1">
+                  <ClipboardCheck className="w-3.5 h-3.5" /> Audits
+                </div>
+                <h1 className="text-[26px] font-bold tracking-tight text-navy">
+                  Audit Management
+                </h1>
+                <p className="text-[14px] text-slate-500 mt-1">
+                  Welcome back, {userEmail?.split("@")[0] || "User"} ·{" "}
+                  {new Date().toLocaleDateString("en-GB", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
               </div>
               <button
                 onClick={fetchRecords}
-                className="flex items-center gap-1.5 text-[12px] px-2 py-1 rounded hover:bg-sap-item-hover text-sap-text"
+                className="flex items-center gap-2 text-[13px] font-medium px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-white hover:shadow-sm transition"
               >
                 <RefreshCw className="w-4 h-4" /> Refresh
               </button>
             </div>
 
-            <h1 className="text-[20px] font-semibold text-sap-primary mb-1">
-              Home
-            </h1>
-            <p className="text-[13px] text-sap-muted mb-5">
-              Welcome back, {userEmail?.split("@")[0] || "User"} ·{" "}
-              {new Date().toLocaleDateString("en-GB", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
-
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-[13px] rounded">
+              <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 text-[13px] rounded-lg">
                 {error}
               </div>
             )}
 
-            {/* ===== SAP TILES ===== */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-6">
+            {/* ===== TILES ===== */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-7">
               <Tile
                 icon={ClipboardList}
                 label="Quality Records"
                 count={records.length}
-                color="#0070f2"
-                onClick={() => setActiveNav("Quality Records")}
+                color="#2563eb"
+                accent="Records across all compliance areas"
               />
               <Tile
                 icon={AlertTriangle}
                 label="Open Actions"
                 count={open}
                 color="#e78a07"
-                onClick={() => setActiveNav("Quality Records")}
-              />
-              <Tile
-                icon={CheckCircle2}
-                label="Closed"
-                count={closed}
-                color="#107e3e"
-                onClick={() => setActiveNav("Quality Records")}
+                accent="Requiring attention"
               />
               <Tile
                 icon={FileCheck}
                 label="Nonconformities"
                 count={nonconformities}
                 color="#d0253c"
-                onClick={() => setActiveNav("Quality Records")}
+                accent="Issues identified"
               />
               <Tile
-                icon={CalendarClock}
-                label="In Progress"
-                count={inProgress}
-                color="#5a5a5a"
-                onClick={() => setActiveNav("Quality Records")}
+                icon={CheckCircle2}
+                label="Closed"
+                count={closed}
+                color="#16a34a"
+                accent="Successfully resolved"
               />
             </div>
 
-            {/* ===== SAP LIST REPORT ===== */}
-            <div className="bg-white rounded shadow-sm border border-sap-border overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-sap-border">
-                <h2 className="text-[14px] font-semibold text-sap-text flex items-center gap-2">
-                  <ClipboardList className="w-4 h-4 text-sap-primary" />
+            {/* ===== RECORDS TABLE ===== */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                <h2 className="text-[16px] font-semibold text-navy flex items-center gap-2">
+                  <ClipboardList className="w-[18px] h-[18px] text-blue-600" />
                   Quality Records
                 </h2>
                 <button
                   onClick={() => setShowForm(!showForm)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[13px] font-semibold bg-sap-primary text-white hover:bg-sap-primary-hover"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
                 >
                   <Plus className="w-4 h-4" /> Create
                 </button>
@@ -374,10 +356,10 @@ export default function Dashboard() {
               {showForm && (
                 <form
                   onSubmit={createRecord}
-                  className="p-3 border-b border-sap-border bg-sap-form-bg grid grid-cols-1 md:grid-cols-3 gap-3"
+                  className="p-4 border-b border-slate-100 bg-slate-50 grid grid-cols-1 md:grid-cols-3 gap-3"
                 >
                   <div className="md:col-span-1">
-                    <label className="block text-[12px] font-semibold text-sap-text mb-1">
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">
                       Title
                     </label>
                     <input
@@ -385,18 +367,18 @@ export default function Dashboard() {
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="e.g., Supplier late delivery"
-                      className="w-full px-2.5 py-1.5 text-[13px] border border-sap-border rounded focus:outline-none focus:border-sap-primary focus:ring-1 focus:ring-sap-primary"
+                      className="w-full px-3 py-2 text-[14px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10 bg-white"
                       required
                     />
                   </div>
                   <div className="md:col-span-1">
-                    <label className="block text-[12px] font-semibold text-sap-text mb-1">
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">
                       Type
                     </label>
                     <select
                       value={type}
                       onChange={(e) => setType(e.target.value as NoticeType)}
-                      className="w-full px-2.5 py-1.5 text-[13px] border border-sap-border rounded focus:outline-none focus:border-sap-primary"
+                      className="w-full px-3 py-2 text-[14px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 bg-white"
                     >
                       {NOTICE_TYPES.map((t) => (
                         <option key={t} value={t}>
@@ -406,7 +388,7 @@ export default function Dashboard() {
                     </select>
                   </div>
                   <div className="md:col-span-1">
-                    <label className="block text-[12px] font-semibold text-sap-text mb-1">
+                    <label className="block text-[12px] font-semibold text-slate-700 mb-1">
                       Description
                     </label>
                     <textarea
@@ -414,21 +396,21 @@ export default function Dashboard() {
                       onChange={(e) => setDescription(e.target.value)}
                       placeholder="Describe the issue or risk..."
                       rows={2}
-                      className="w-full px-2.5 py-1.5 text-[13px] border border-sap-border rounded focus:outline-none focus:border-sap-primary resize-none"
+                      className="w-full px-3 py-2 text-[14px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-600 resize-none bg-white"
                     />
                   </div>
                   <div className="md:col-span-3 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => setShowForm(false)}
-                      className="px-3 py-1.5 rounded text-[13px] font-semibold border border-sap-border text-sap-text hover:bg-sap-item-hover"
+                      className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-100"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={saving || !title.trim()}
-                      className="px-4 py-1.5 rounded text-[13px] font-semibold bg-sap-primary text-white hover:bg-sap-primary-hover disabled:opacity-50"
+                      className="px-4 py-2 rounded-lg text-[13px] font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                       {saving ? "Creating..." : "Save"}
                     </button>
@@ -437,21 +419,21 @@ export default function Dashboard() {
               )}
 
               {records.length === 0 ? (
-                <div className="p-10 text-center text-sap-muted text-[13px]">
-                  <ClipboardList className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <div className="p-14 text-center text-slate-400 text-[14px]">
+                  <ClipboardList className="w-9 h-9 mx-auto mb-3 opacity-40" />
                   No records found. Click "Create" to add one.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-[13px]">
+                  <table className="w-full text-[14px]">
                     <thead>
-                      <tr className="bg-sap-table-head text-left text-sap-muted text-[12px] uppercase tracking-wide">
-                        <th className="px-3 py-2 font-semibold">Title</th>
-                        <th className="px-3 py-2 font-semibold">Type</th>
-                        <th className="px-3 py-2 font-semibold">Description</th>
-                        <th className="px-3 py-2 font-semibold">Created</th>
-                        <th className="px-3 py-2 font-semibold">Status</th>
-                        <th className="px-3 py-2 font-semibold text-right">Actions</th>
+                      <tr className="bg-slate-50 text-left text-slate-500 text-[12px] uppercase tracking-wider">
+                        <th className="px-5 py-3 font-semibold">Title</th>
+                        <th className="px-5 py-3 font-semibold">Type</th>
+                        <th className="px-5 py-3 font-semibold">Description</th>
+                        <th className="px-5 py-3 font-semibold">Created</th>
+                        <th className="px-5 py-3 font-semibold">Status</th>
+                        <th className="px-5 py-3 font-semibold text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -460,59 +442,56 @@ export default function Dashboard() {
                         return (
                           <tr
                             key={record.id}
-                            className={`border-t border-sap-border hover:bg-sap-item-hover ${
-                              i % 2 === 1 ? "bg-sap-row-alt" : ""
+                            className={`border-t border-slate-100 hover:bg-slate-50 transition-colors ${
+                              i % 2 === 1 ? "bg-slate-50/50" : ""
                             }`}
                           >
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2.5">
                                 <Icon
-                                  className="w-4 h-4 shrink-0"
+                                  className="w-[18px] h-[18px] shrink-0"
                                   style={{ color: statusColor[record.status] }}
                                 />
-                                <span className="font-medium text-sap-text">
+                                <span className="font-medium text-navy">
                                   {record.title}
                                 </span>
                               </div>
                             </td>
-                            <td className="px-3 py-2">
-                              <span className="px-2 py-0.5 rounded bg-sap-badge text-[11px] font-medium text-sap-primary">
+                            <td className="px-5 py-3">
+                              <span className="px-2.5 py-1 rounded-full bg-blue-50 text-[12px] font-medium text-blue-700">
                                 {record.type}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-sap-muted max-w-[260px] truncate">
+                            <td className="px-5 py-3 text-slate-500 max-w-[260px] truncate">
                               {record.description || "—"}
                             </td>
-                            <td className="px-3 py-2 text-sap-muted whitespace-nowrap">
+                            <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
                               {new Date(record.created_at).toLocaleDateString()}
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-5 py-3">
                               <select
                                 value={record.status}
                                 onChange={(e) =>
                                   updateStatus(record.id, e.target.value as Status)
                                 }
-                                className="text-[12px] font-medium px-2 py-1 rounded border border-transparent cursor-pointer focus:outline-none focus:border-sap-primary"
-                                style={{
-                                  color: "#fff",
-                                  backgroundColor: statusColor[record.status],
-                                }}
+                                className="text-[12px] font-medium px-3 py-1.5 rounded-full border border-transparent cursor-pointer focus:outline-none text-white"
+                                style={{ backgroundColor: statusColor[record.status] }}
                               >
                                 {STATUS.map((s) => (
-                                  <option key={s} value={s} className="text-sap-text">
+                                  <option key={s} value={s} className="text-navy bg-white">
                                     {s}
                                   </option>
                                 ))}
                               </select>
                             </td>
-                            <td className="px-3 py-2">
+                            <td className="px-5 py-3">
                               <div className="flex justify-end">
                                 <button
                                   onClick={() => deleteRecord(record.id)}
-                                  className="p-1.5 rounded text-sap-muted hover:text-red-600 hover:bg-red-50"
+                                  className="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                                   aria-label="Delete"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-[18px] h-[18px]" />
                                 </button>
                               </div>
                             </td>
@@ -527,52 +506,51 @@ export default function Dashboard() {
           </div>
         </main>
       </div>
-
-      {/* ===== SAP STATUS BAR (bottom) ===== */}
-      <footer className="h-7 bg-sap-status text-white text-[11px] flex items-center px-3 gap-3 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <HelpCircle className="w-3.5 h-3.5 text-sap-accent" />
-          Help
-        </div>
-        <div className="flex-1" />
-        <div className="flex items-center gap-1.5">
-          <FileText className="w-3.5 h-3.5 text-sap-accent" />
-          {userEmail}
-        </div>
-        <span className="text-sap-accent/70">QMS © {new Date().getFullYear()}</span>
-      </footer>
     </div>
   );
 }
+
+const NAV_ITEMS = [
+  { icon: ClipboardList, label: "Dashboard" },
+  { icon: ClipboardCheck, label: "Audits" },
+  { icon: FileCheck, label: "Quality Records" },
+  { icon: AlertTriangle, label: "Nonconformities" },
+  { icon: CalendarClock, label: "Calendar" },
+  { icon: ShieldCheck, label: "Compliance" },
+];
 
 function Tile({
   icon: Icon,
   label,
   count,
   color,
-  onClick,
+  accent,
 }: {
   icon: any;
   label: string;
   count: number;
   color: string;
-  onClick?: () => void;
+  accent: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="bg-white rounded shadow-sm border border-sap-border p-3 text-left hover:shadow-md transition-shadow flex items-center gap-3"
-    >
-      <div
-        className="w-11 h-11 rounded flex items-center justify-center shrink-0"
-        style={{ backgroundColor: `${color}1a`, color }}
-      >
-        <Icon className="w-6 h-6" />
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow group">
+      <div className="flex items-start justify-between">
+        <div
+          className="w-11 h-11 rounded-[10px] flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${color}14`, color }}
+        >
+          <Icon className="w-[22px] h-[22px]" />
+        </div>
+        <button
+          className="p-1.5 rounded-lg text-slate-300 hover:text-slate-500 hover:bg-slate-50 transition opacity-0 group-hover:opacity-100"
+          aria-label={`View ${label}`}
+        >
+          <ArrowUpRight className="w-4 h-4" />
+        </button>
       </div>
-      <div className="overflow-hidden">
-        <p className="text-[20px] font-bold text-sap-text leading-none">{count}</p>
-        <p className="text-[12px] text-sap-muted truncate">{label}</p>
-      </div>
-    </button>
+      <p className="text-[32px] font-bold text-navy leading-none mt-4">{count}</p>
+      <p className="text-[14px] font-semibold text-slate-800 mt-2">{label}</p>
+      <p className="text-[12px] text-slate-400 mt-0.5">{accent}</p>
+    </div>
   );
 }
