@@ -41,9 +41,6 @@ export default function LoginPage() {
     router.refresh();
   };
 
-  const inputClass =
-    "w-full h-12 px-4 pr-11 text-[15px] text-slate-900 placeholder-slate-400 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition";
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm">
@@ -66,11 +63,11 @@ export default function LoginPage() {
 
         <form
           onSubmit={handleLogin}
-          className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm space-y-5"
+          className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm space-y-6"
         >
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Email
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">
+              Email address
             </label>
             <input
               type="email"
@@ -79,14 +76,23 @@ export default function LoginPage() {
               placeholder="you@company.com"
               autoComplete="email"
               required
-              className={inputClass}
+              className="w-full h-12 px-4 text-[15px] text-slate-900 placeholder-slate-400 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Password
-            </label>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => {}}
+                className="text-xs text-blue-600 hover:text-blue-700"
+              >
+                Forgot password?
+              </button>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -95,7 +101,7 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 autoComplete="current-password"
                 required
-                className={inputClass}
+                className="w-full h-12 px-4 pr-12 text-[15px] text-slate-900 placeholder-slate-400 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition"
               />
               <button
                 type="button"
@@ -115,7 +121,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading || !email || !password}
-            className="w-full h-12 bg-blue-600 text-white rounded-xl font-semibold text-sm hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-blue-600/20"
+            className="w-full h-12 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-md shadow-blue-600/20"
           >
             {loading ? (
               <>
